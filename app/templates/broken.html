@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "macros.html" import art %}
+{% set nav = 'broken' %}
+{% block title %}Broken &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Broken</h1>
+<p class="sub">{{ games | length }} listed &middot;
+  <a href="/broken?show={{ 'all' if show == 'open' else 'open' }}">{{ 'show unfixable' if show == 'open' else 'hide unfixable' }}</a></p>
+
+{% if not games %}<div class="empty">Nothing broken.</div>{% endif %}
+
+{% for g in games %}
+<form class="qcard grain" method="post" action="/broken/{{ g.id }}">
+  <div class="shot"><div class="art">{{ art(g) }}</div></div>
+  <div class="body">
+    <h3><a href="/game/{{ g.id }}">{{ g.title }}</a></h3>
+    <div class="qmeta">
+      <span class="tag {{ 'no' if g.broken_status == 'unfixable' else 'warn' }}">{{ (g.broken_status or 'unaddressed').replace('_', ' ') }}</span>
+      {% if g.verifier %}<span>{{ g.verifier }}</span>{% endif %}
+    </div>
+    <div class="row">
+      <div class="grow">
+        <label class="lbl" for="bs-{{ g.id }}">Status</label>
+        <select name="broken_status" id="bs-{{ g.id }}">
+          {% for s in broken_statuses %}
+          <option value="{{ s }}" {{ 'selected' if g.broken_status == s }}>{% if s == 'fixed_recheck' %}fixed - recheck{% else %}{{ s.replace('_', ' ') }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="grow" style="flex:3">
+        <label class="lbl" for="bn-{{ g.id }}">Notes</label>
+        <textarea name="notes" id="bn-{{ g.id }}" style="min-height:44px">{{ g.notes or '' }}</textarea>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="primary" type="submit">Update</button></div>
+  </div>
+</form>
+{% endfor %}
+{% endblock %}

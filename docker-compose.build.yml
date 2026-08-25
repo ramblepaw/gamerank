@@ -1,0 +1,17 @@
+# Local build instead of pulling from ghcr.
+#   docker compose -f docker-compose.build.yml up -d --build
+services:
+  gamerank:
+    container_name: gamerank
+    build: .
+    ports:
+      - '8090:8080'
+    restart: unless-stopped
+    environment:
+      GRT_DATA_DIR: /data
+      GRT_QUEUE_SIZE: '5'
+      GRT_SECRET: ${GRT_SECRET:-local-test-secret}
+      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
+      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
+    volumes:
+      - './data:/data'

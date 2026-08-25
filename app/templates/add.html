@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% set nav = 'add' %}
+{% block title %}Add &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Add games</h1>
+<p class="sub">Paste the list you post to Discord. {{ slots.balance }} slots free.</p>
+
+{% if result %}
+  <div class="flash">
+    Added {{ result.added | length }}.
+    {% if result.updated %}Attached store links to {{ result.updated | length }} already in the library.{% endif %}
+    {% if result.skipped %}Skipped {{ result.skipped | length }}.{% endif %}
+  </div>
+  {% if result.updated %}
+  <div class="tablewrap" style="margin-bottom:16px">
+    <table><thead><tr><th>Linked</th><th>AppID</th></tr></thead><tbody>
+      {% for u in result.updated %}
+      <tr><td><a href="/game/{{ u.id }}">{{ u.title }}</a></td>
+          <td style="color:var(--dim)">{{ u.appid }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+  </div>
+  {% endif %}
+  {% if result.skipped %}
+  <div class="card grain" style="margin-bottom:16px">
+    <h2 style="margin-top:0">Skipped</h2>
+    <ul class="plain log">{% for t in result.skipped %}<li>{{ t }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if result.added %}
+  <div class="tablewrap" style="margin-bottom:16px">
+    <table><thead><tr><th>Title</th><th>AppID</th></tr></thead><tbody>
+      {% for a in result.added %}
+      <tr><td><a href="/game/{{ a.id }}">{{ a.title }}</a></td>
+          <td style="color:var(--dim)">{{ a.appid or '—' }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+  </div>
+  {% endif %}
+{% endif %}
+
+{% if parsed %}
+  {% set new_count = parsed | selectattr('match.kind', 'equalto', 'new') | list | length %}
+  {% set near_count = parsed | selectattr('match.kind', 'equalto', 'near') | list | length %}
+  <form method="post" action="/add/confirm">
+    <input type="hidden" name="text" value="{{ raw }}">
+    <div class="tablewrap" style="margin-bottom:14px">
+      <table>
+        <thead><tr><th>Pasted title</th><th>AppID</th><th>Match</th></tr></thead>
+        <tbody>
+          {% for p in parsed %}
+          <tr>
+            <td class="wrap" style="max-width:420px">{{ p.title }}</td>
+            <td style="color:var(--dim)">{{ p.steam_appid or '—' }}</td>
+            <td class="wrap">
+              {% if p.match.kind == 'exact' %}
+                <span class="tag ok">in library</span>
+                <span style="color:var(--dim)">link attached, no slot</span>
+              {% elif p.match.kind == 'new' %}
+                <span class="tag warn">not found</span>
+                <span style="color:var(--dim)">will be added, costs a slot</span>
+              {% else %}
+                <span class="tag no">check this</span>
+                <div style="margin-top:6px">
+                  {% for cand in p.match.candidates %}
+                  <label style="display:block;margin-bottom:4px">
+                    <input type="radio" name="decision_{{ p.i }}" value="link:{{ cand.id }}"
+                           style="width:auto" {{ 'checked' if loop.first }}>
+                    same as <a href="/game/{{ cand.id }}" target="_blank">{{ cand.title }}</a>
+                  </label>
+                  {% endfor %}
+                  <label style="display:block;margin-bottom:4px">
+                    <input type="radio" name="decision_{{ p.i }}" value="new" style="width:auto">
+                    different game, add it (costs a slot)
+                  </label>
+                  <label style="display:block;margin-bottom:4px">
+                    <input type="radio" name="decision_{{ p.i }}" value="skip" style="width:auto">
+                    skip
+                  </label>
+                  <label style="display:block;color:var(--dim)">
+                    <input type="checkbox" name="retitle_{{ p.i }}" value="1" style="width:auto">
+                    replace the stored title with the full one
+                  </label>
+                </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="sub">
+      {{ new_count }} to add, costs {{ new_count }} slot{{ "" if new_count == 1 else "s" }}. You have {{ slots.balance }}.
+      {% if near_count %}{{ near_count }} need{{ 's' if near_count == 1 else '' }} a decision above.{% endif %}
+      {% if new_count > slots.balance %}<span class="tag no">short by {{ new_count - slots.balance }}</span>{% endif %}</p>
+    <div class="row">
+      <label style="display:flex;gap:7px;align-items:center;color:var(--dim)">
+        <input type="checkbox" name="fetch" value="1" checked style="width:auto"> fetch art and store links
+      </label>
+      <button class="primary" type="submit">Add {{ new_count }}</button>
+      <a class="btn" href="/add">Cancel</a>
+    </div>
+  </form>
+{% else %}
+  <form method="post" action="/add/preview">
+    <label class="lbl" for="text">Paste list</label>
+    <textarea name="text" id="text" required style="min-height:200px"
+      placeholder="* [Fish Hunters](https://store.steampowered.com/app/3468330/)"></textarea>
+    <div class="row" style="margin-top:12px"><button class="primary" type="submit">Preview</button></div>
+  </form>
+{% endif %}
+{% endblock %}

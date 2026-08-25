@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import steamlink %}
+{% set nav = 'needsart' %}
+{% block title %}Needs art &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Needs art</h1>
+<p class="sub">
+  {{ total }} games IGDB couldn't match confidently. Usually a spelling difference
+  in the sheet. Each one is a search and a click.
+  {% if not igdb %}<span class="tag no">IGDB credentials not set</span>{% endif %}
+</p>
+
+{% if not games %}
+  <div class="empty">Every game has art.</div>
+{% else %}
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Title</th><th>Section</th><th>Added</th><th></th></tr></thead>
+  <tbody>
+  {% for g in games %}
+    <tr>
+      <td><a href="/game/{{ g.id }}">{{ g.title }}</a> {{ steamlink(g) }}</td>
+      <td style="color:var(--dim)">{{ g.section or '—' }}</td>
+      <td style="color:var(--dim)">{{ g.date_added or '—' }}</td>
+      <td><a class="btn sm" href="/game/{{ g.id }}/match">Find a match</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if pages > 1 %}
+<div class="pager">
+  {% if page > 1 %}<a class="btn" href="/needs-art?page={{ page - 1 }}">Prev</a>{% endif %}
+  <span>{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a class="btn" href="/needs-art?page={{ page + 1 }}">Next</a>{% endif %}
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

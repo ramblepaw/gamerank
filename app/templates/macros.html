@@ -1,0 +1,42 @@
+{% macro art(g, cls='') %}
+  {% if g.cover_url %}
+    <img src="{{ g.cover_url }}" alt="" loading="lazy"
+         onerror="this.style.display='none';this.parentNode.classList.add('failed')">
+  {% else %}
+    <div class="noart" aria-hidden="true">no art</div>
+  {% endif %}
+{% endmacro %}
+
+{% macro tile(g) %}
+<a class="tile" href="/game/{{ g.id }}">
+  <div class="art">
+    {{ art(g) }}
+    {% if g.grade %}<span class="corner grade-letter g-{{ g.grade }}">{{ g.grade }}</span>{% endif %}
+    <span class="flagrow">
+      {% if not g.verified %}<span class="tag dim">unchecked</span>{% endif %}
+      {% if g.broken %}<span class="tag no">broken</span>{% endif %}
+      {% if g.keep_flag == 'remove' %}<span class="tag no">cut</span>{% endif %}
+    </span>
+  </div>
+  <div class="name">{{ g.title }}</div>
+  {# The date shown is the one the list is ordered by: an update supersedes
+     the date the game was first added. #}
+  {% set shown = g.touched or g.last_updated or g.date_added %}
+  <div class="meta">
+    {{- shown or '' -}}
+    {%- if g.last_updated and g.last_updated == shown and g.date_added != shown %} upd{% endif -%}
+    {%- if g.playtime_minutes is not none %} &middot; {{ g.playtime_minutes }}m{% endif -%}
+  </div>
+</a>
+{% endmacro %}
+
+{% macro thumb(g) %}
+<td class="thumb">
+  {% if g.cover_url %}<img src="{{ g.cover_url }}" alt="" loading="lazy"
+    onerror="this.style.visibility='hidden'">{% endif %}
+</td>
+{% endmacro %}
+
+{% macro steamlink(g) %}
+  {% if g.store_url %}<a href="{{ g.store_url }}" target="_blank" rel="noopener">store</a>{% endif %}
+{% endmacro %}

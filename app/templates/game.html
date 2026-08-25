@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% from "macros.html" import art %}
+{% set nav = 'library' %}
+{% block title %}{{ g.title }} &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>{{ g.title }}</h1>
+<p class="sub">
+  #{{ g.id }}
+  {% if g.verified %}<span class="tag ok">checked{% if g.verifier %} &middot; {{ g.verifier }}{% endif %}</span>
+  {% else %}<span class="tag dim">unchecked</span>{% endif %}
+  {% if g.broken %}<span class="tag no">{{ (g.broken_status or 'broken').replace('_', ' ') }}</span>{% endif %}
+  {% if g.status == 'removed' %}<span class="tag warn">removed</span>{% endif %}
+  {% if g.store_url %}&middot; <a href="{{ g.store_url }}" target="_blank" rel="noopener">store page</a>{% endif %}
+</p>
+
+<div class="split3">
+  <div>
+    <div class="art" style="aspect-ratio:2/3;background:#17120f;border:1px solid var(--line-2);overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.34)">
+      {{ art(g) }}
+    </div>
+    <form method="post" action="/game/{{ g.id }}/fetch" style="margin-top:10px">
+      <button type="submit" style="width:100%">Fetch metadata</button>
+    </form>
+    <p style="margin-top:6px"><a class="btn" href="/game/{{ g.id }}/match" style="display:block;text-align:center">Pick a match by hand</a></p>
+    <p class="sub" style="font-size:11px;margin-top:6px">
+      {% if igdb %}IGDB for art, Steam for the store link.{% else %}Steam only - IGDB needs Twitch credentials.{% endif %}
+      {% if g.meta_source %} Last from {{ g.meta_source }}.{% endif %}
+    </p>
+
+    <h2>Log</h2>
+    <div class="card log">
+      {% if history %}
+      <ul class="plain">
+        {% for h in history %}
+        <li>{{ h.created_at[:10] }} {{ h.action }}{% if h.detail %} &mdash; {{ h.detail }}{% endif %}
+          {% if h.display_name %}<span style="opacity:.7">({{ h.display_name }})</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+      {% else %}<p style="margin:0">Nothing yet.</p>{% endif %}
+    </div>
+  </div>
+
+  <div>
+    <form class="card grain" method="post" action="/game/{{ g.id }}">
+      <div class="row">
+        <div class="grow" style="flex:3">
+          <label class="lbl" for="title">Title</label>
+          <input type="text" name="title" id="title" value="{{ g.title }}" required>
+        </div>
+        <div class="grow">
+          <label class="lbl" for="date_added">Date added</label>
+          <input type="date" name="date_added" id="date_added" value="{{ g.date_added or '' }}">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <div class="grow">
+          <label class="lbl" for="verified">Checked</label>
+          <select name="verified" id="verified">
+            <option value="1" {{ 'selected' if g.verified }}>yes</option>
+            <option value="0" {{ 'selected' if not g.verified }}>no</option>
+          </select>
+        </div>
+        <div class="grow">
+          <label class="lbl" for="grade">Grade</label>
+          <select name="grade" id="grade">
+            <option value="">ungraded</option>
+            {% for l in grades %}<option value="{{ l }}" {{ 'selected' if g.grade == l }}>{{ l }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="grow">
+          <label class="lbl" for="playtime">Minutes</label>
+          <input type="number" min="0" name="playtime" id="playtime"
+                 value="{{ g.playtime_minutes if g.playtime_minutes is not none else '' }}">
+        </div>
+        <div class="grow">
+          <label class="lbl" for="keep_flag">Keep</label>
+          <select name="keep_flag" id="keep_flag">
+            <option value="">&mdash;</option>
+            <option value="keep" {{ 'selected' if g.keep_flag == 'keep' }}>keep</option>
+            <option value="remove" {{ 'selected' if g.keep_flag == 'remove' }}>remove</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <label class="lbl" for="notes">Notes</label>
+        <textarea name="notes" id="notes">{{ g.notes or '' }}</textarea>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <div class="grow">
+          <label class="lbl" for="broken_status">Broken status</label>
+          <select name="broken_status" id="broken_status">
+            <option value="">not broken</option>
+            {% for s in broken_statuses %}
+            <option value="{{ s }}" {{ 'selected' if g.broken_status == s }}>{% if s == 'fixed_recheck' %}fixed - recheck{% else %}{{ s.replace('_', ' ') }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="grow">
+          <label class="lbl" for="section">Section</label>
+          <input type="text" name="section" id="section" value="{{ g.section or '' }}">
+        </div>
+        <div class="grow">
+          <label class="lbl" for="version">Version</label>
+          <input type="text" name="version" id="version" value="{{ g.version or '' }}">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <div class="grow">
+          <label class="lbl" for="steam_appid">Steam appid</label>
+          <input type="number" name="steam_appid" id="steam_appid" value="{{ g.steam_appid or '' }}">
+        </div>
+        <div class="grow" style="flex:2">
+          <label class="lbl" for="store_url">Store link</label>
+          <input type="text" name="store_url" id="store_url" value="{{ g.store_url or '' }}">
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <label class="lbl" for="cover_url">Cover image URL</label>
+        <input type="text" name="cover_url" id="cover_url" value="{{ g.cover_url or '' }}">
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <button class="primary" type="submit">Save</button>
+        <a class="btn" href="/library">Library</a>
+        {% if g.status == 'active' %}
+        <button class="bad" type="submit" formaction="/game/{{ g.id }}/remove" formnovalidate>Mark removed</button>
+        {% else %}
+        <button type="submit" formaction="/game/{{ g.id }}/restore" formnovalidate>Restore</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

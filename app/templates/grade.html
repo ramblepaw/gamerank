@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "macros.html" import art, steamlink %}
+{% set nav = 'grade' %}
+{% block title %}Grade &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Grade</h1>
+<p class="sub">{{ remaining }} ungraded</p>
+
+{% if not games %}<div class="empty">Nothing to grade.</div>{% endif %}
+
+{% for g in games %}
+<form class="qcard grain" method="post" action="/grade/{{ g.id }}">
+  <div class="shot"><div class="art">{{ art(g) }}</div></div>
+  <div class="body">
+    <h3><a href="/game/{{ g.id }}">{{ g.title }}</a></h3>
+    <div class="qmeta">
+      {% if g.section %}<span>{{ g.section }}</span>{% endif %}
+      {% if g.date_added %}<span>{{ g.date_added }}</span>{% endif %}
+      {% if g.store_url %}<span>{{ steamlink(g) }}</span>{% endif %}
+    </div>
+
+    <div class="seg grades" role="radiogroup" aria-label="Grade">
+      {% for letter in grades %}
+      <input type="radio" name="grade" id="g-{{ g.id }}-{{ letter }}" value="{{ letter }}">
+      <label for="g-{{ g.id }}-{{ letter }}" class="g-{{ letter }}">{{ letter }}</label>
+      {% endfor %}
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <div class="grow">
+        <label class="lbl" for="pt-{{ g.id }}">Minutes played</label>
+        <input type="number" min="0" step="5" name="playtime" id="pt-{{ g.id }}">
+      </div>
+      <div class="grow">
+        <label class="lbl">Keep</label>
+        <div class="seg">
+          <input type="radio" name="keep_flag" id="k-{{ g.id }}" value="keep">
+          <label for="k-{{ g.id }}">Keep</label>
+          <input type="radio" name="keep_flag" id="r-{{ g.id }}" value="remove">
+          <label for="r-{{ g.id }}">Remove</label>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <label class="lbl" for="gn-{{ g.id }}">Notes</label>
+      <textarea name="notes" id="gn-{{ g.id }}" style="min-height:56px">{{ g.notes or '' }}</textarea>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button class="primary" type="submit">Submit</button>
+    </div>
+  </div>
+</form>
+{% endfor %}
+{% endblock %}

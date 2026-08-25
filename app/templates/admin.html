@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% set nav = 'admin' %}
+{% block title %}Admin &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Admin</h1>
+
+<div class="split">
+  <div>
+    <h2>Import masterlist</h2>
+    <form class="card grain" method="post" action="/admin/import" enctype="multipart/form-data">
+      <label class="lbl" for="file">Google Sheets CSV</label>
+      <input type="file" name="file" id="file" accept=".csv" required>
+      <div style="height:10px"></div>
+      <label style="display:flex;gap:7px;align-items:center;font-size:13px">
+        <input type="checkbox" name="replace" value="1" checked style="width:auto">
+        Replace everything
+      </label>
+      <div style="height:10px"></div>
+      <button class="primary" type="submit">Import</button>
+    </form>
+
+    <h2>Cover art</h2>
+    <div class="card grain">
+      <p class="sub" style="margin:0 0 12px">
+        {{ no_cover }} games have no art.
+        {% if not igdb %}<span class="tag no">IGDB credentials not set</span>{% endif %}
+      </p>
+
+      <div id="jobbox" {% if not job.running %}style="display:none"{% endif %}>
+        <div class="row" style="justify-content:space-between">
+          <b id="jobcount">{{ job.done }} / {{ job.total }}</b>
+          <span style="color:var(--dim);font-size:12px" id="jobeta"></span>
+        </div>
+        <div class="bar" style="height:6px"><i id="jobbar" style="width:{{ job.pct }}%"></i></div>
+        <p class="sub" style="font-size:12px;margin:8px 0 0">
+          <span id="jobfound">{{ job.found }}</span> matched &middot;
+          <span id="jobcurrent" style="opacity:.75"></span>
+        </p>
+        <form method="post" action="/admin/covers/stop" style="margin-top:10px">
+          <button class="bad" type="submit">Stop</button>
+        </form>
+      </div>
+
+      <div id="jobidle" {% if job.running %}style="display:none"{% endif %}>
+        {% if job.finished_at and not job.running %}
+        <p class="sub" style="margin:0 0 10px">
+          Last run matched {{ job.found }} of {{ job.done }}.
+        </p>
+        {% endif %}
+        <form method="post" action="/admin/covers">
+          <div class="row">
+            <select name="scope" style="width:auto;flex:1">
+              <option value="missing">Only games with no art ({{ no_cover }})</option>
+              <option value="all">Everything, re-fetch</option>
+            </select>
+            <button class="primary" type="submit">Run</button>
+          </div>
+          <label style="display:flex;gap:7px;align-items:center;font-size:13px;margin-top:10px">
+            <input type="checkbox" name="retitle" value="1" checked style="width:auto">
+            Correct spellings from IGDB
+          </label>
+          <p class="sub" style="font-size:11px;margin:6px 0 0">
+            Rewrites the title when a match is confident, so
+            &ldquo;Chants of senaar&rdquo; becomes &ldquo;Chants of Sennaar&rdquo;.
+            Every rename is written to that game's log with the old spelling.
+          </p>
+        </form>
+        <p class="sub" style="font-size:11px;margin:10px 0 0">
+          Runs in the background until finished &mdash; roughly three games a second, so
+          about {{ (no_cover / 3 / 60) | round(0, 'ceil') | int }} minutes for {{ no_cover }}.
+          You can leave the page.
+        </p>
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <form method="post" action="/admin/igdb-test">
+        <button type="submit">Test IGDB connection</button>
+      </form>
+      <a class="btn" href="/needs-art">Needs art worklist</a>
+    </div>
+
+    <script>
+    (function () {
+      var box = document.getElementById('jobbox'), idle = document.getElementById('jobidle');
+      function tick() {
+        fetch('/admin/job').then(function (r) { return r.json(); }).then(function (j) {
+          box.style.display = j.running ? '' : 'none';
+          idle.style.display = j.running ? 'none' : '';
+          document.getElementById('jobcount').textContent = j.done + ' / ' + j.total;
+          document.getElementById('jobbar').style.width = j.pct + '%';
+          document.getElementById('jobfound').textContent = j.found;
+          document.getElementById('jobcurrent').textContent = j.current || '';
+          document.getElementById('jobeta').textContent =
+            j.eta_seconds ? ('about ' + Math.ceil(j.eta_seconds / 60) + ' min left') : '';
+          if (!j.running && box.dataset.was === '1') location.reload();
+          box.dataset.was = j.running ? '1' : '0';
+          setTimeout(tick, j.running ? 1000 : 4000);
+        }).catch(function () { setTimeout(tick, 5000); });
+      }
+      tick();
+    })();
+    </script>
+
+    <h2>Settings</h2>
+    <form class="card grain" method="post" action="/admin/settings">
+      <div class="row">
+        <div class="grow"><label class="lbl" for="slot_limit">Slot limit</label>
+          <input type="number" min="1" name="slot_limit" id="slot_limit" value="{{ settings.get('slot_limit', '50') }}"></div>
+        <div class="grow"><label class="lbl" for="checks_per_slot">Checks per slot</label>
+          <input type="number" min="1" name="checks_per_slot" id="checks_per_slot" value="{{ settings.get('checks_per_slot', '2') }}"></div>
+        <div class="grow"><label class="lbl" for="queue_size">Queue size</label>
+          <input type="number" min="1" name="queue_size" id="queue_size" value="{{ settings.get('queue_size', '5') }}"></div>
+        <div class="grow"><label class="lbl" for="library_target">Target</label>
+          <input type="number" min="1" name="library_target" id="library_target" value="{{ settings.get('library_target', '2000') }}"></div>
+      </div>
+      <div style="height:12px"></div>
+      <button class="primary" type="submit">Save</button>
+    </form>
+
+    <h2>Users</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Name</th><th>Username</th><th>Admin</th></tr></thead>
+        <tbody>{% for u in users %}
+          <tr><td>{{ u.display_name }}</td><td style="color:var(--dim)">{{ u.username }}</td>
+              <td>{{ 'yes' if u.is_admin else '' }}</td></tr>
+        {% endfor %}</tbody>
+      </table>
+    </div>
+    <form class="card grain" method="post" action="/admin/users" style="margin-top:10px">
+      <div class="row">
+        <div class="grow"><label class="lbl" for="username">Username</label>
+          <input type="text" name="username" id="username" required></div>
+        <div class="grow"><label class="lbl" for="display_name">Display name</label>
+          <input type="text" name="display_name" id="display_name" required></div>
+        <div class="grow"><label class="lbl" for="password">Password</label>
+          <input type="password" name="password" id="password" autocomplete="new-password"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label style="display:flex;gap:7px;align-items:center;font-size:13px">
+          <input type="checkbox" name="is_admin" value="1" style="width:auto"> Admin</label>
+        <button class="primary" type="submit">Add or update</button>
+      </div>
+    </form>
+
+    <h2>Your password</h2>
+    <form class="card grain" method="post" action="/admin/password">
+      <div class="row">
+        <div class="grow"><label class="lbl" for="newpw">New password</label>
+          <input type="password" name="password" id="newpw" autocomplete="new-password" required></div>
+        <div style="align-self:flex-end"><button type="submit">Set</button></div>
+      </div>
+    </form>
+  </div>
+
+  <div>
+    <h2>Slots</h2>
+    <div class="card grain">
+      <div style="font-size:24px;font-weight:600">{{ slots.balance }} <span style="font-size:13px;color:var(--dim)">/ {{ slots.limit }}</span></div>
+      <div style="color:var(--dim);font-size:12px">{{ slots.check_credit }} credit banked</div>
+      <form method="post" action="/admin/slots" style="margin-top:10px">
+        <div class="row">
+          <input class="grow" type="number" name="balance" id="balance" value="{{ slots.balance }}">
+          <button type="submit">Set</button>
+        </div>
+      </form>
+    </div>
+
+    <h2>Backups</h2>
+    <div class="card grain">
+      <form method="post" action="/admin/export">
+        <button class="primary" type="submit" style="width:100%">Export now</button>
+      </form>
+      <ul class="plain log" style="margin-top:10px">
+        {% for e in exports %}<li><a href="/admin/export/{{ e }}">{{ e }}</a></li>{% endfor %}
+      </ul>
+    </div>
+
+    <h2>Slot ledger</h2>
+    <div class="card log">
+      {% if events %}
+      <ul class="plain">
+        {% for e in events %}
+        <li>{{ e.created_at[:10] }} <b>{{ '+' if e.delta > 0 else '' }}{{ e.delta }}</b>
+          {{ e.reason }}{% if e.title %} &mdash; {{ e.title }}{% endif %}
+          <span style="opacity:.6">&rarr; {{ e.balance_after }}</span></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p style="margin:0">Nothing yet.</p>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "macros.html" import tile %}
+{% set nav = 'dash' %}
+{% block title %}Overview &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>{{ slots.total }} games</h1>
+<p class="sub">Target {{ target }}{% if slots.total > target %} &mdash; {{ slots.total - target }} over{% endif %}</p>
+
+<div class="strip grain">
+  <div>
+    <div class="n {{ 'g-D' if slots.balance <= 0 }}">{{ slots.balance }}</div>
+    <div class="l">slots free</div>
+    <div class="hint">{% if slots.at_cap %}at cap{% else %}{{ slots.checks_to_next_slot }} check{{ '' if slots.checks_to_next_slot == 1 else 's' }} to next{% endif %}</div>
+  </div>
+  <div>
+    <div class="n">{{ slots.unchecked }}</div>
+    <div class="l">unchecked</div>
+    <div class="bar"><i style="width: {{ slots.pct_verified }}%"></i></div>
+  </div>
+  <div>
+    <div class="n">{{ ungraded }}</div>
+    <div class="l">ungraded</div>
+    <div class="hint">{{ grade_dist.values() | sum }} graded</div>
+  </div>
+  <div>
+    <div class="n {{ 'g-D' if broken_count }}">{{ broken_count }}</div>
+    <div class="l">broken</div>
+  </div>
+  <div>
+    <div class="n">{{ removal_ready }}</div>
+    <div class="l">removal candidates</div>
+  </div>
+  <div>
+    <div class="n">{{ removed_total }}</div>
+    <div class="l">removed</div>
+  </div>
+  <div>
+    <div class="n">{{ no_art_count }}</div>
+    <div class="l">needs art</div>
+    {% if no_art_count %}<div class="hint"><a href="/needs-art">work through them</a></div>{% endif %}
+  </div>
+</div>
+
+<div class="split">
+  <div>
+    <h2>Recently added</h2>
+    <div class="grid">
+      {% for g in recent %}{{ tile(g) }}{% endfor %}
+    </div>
+    <p style="margin-top:12px"><a href="/recent">All recent &rarr;</a></p>
+  </div>
+
+  <div>
+    <h2>Grades</h2>
+    <div class="card grain">
+      {% set total_graded = grade_dist.values() | sum %}
+      {% if total_graded %}
+      <table>
+        <tbody>
+        {% for letter in grades %}
+        <tr>
+          <td style="width:30px"><span class="grade-letter g-{{ letter }}">{{ letter }}</span></td>
+          <td style="width:44px">{{ grade_dist.get(letter, 0) }}</td>
+          <td style="width:100%"><div class="bar" style="margin:0"><i style="width: {{ (grade_dist.get(letter, 0) / total_graded * 100) | round(1) }}%"></i></div></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="sub" style="margin:0">None yet.</p>{% endif %}
+    </div>
+
+    <h2>Wishlist</h2>
+    <div class="card grain">
+      <div class="n" style="font-size:24px;font-weight:600">{{ wishlist }}</div>
+      <div class="l" style="color:var(--dim);font-size:12px">waiting &mdash; <a href="/wishlist">open</a></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

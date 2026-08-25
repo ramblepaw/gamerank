@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import art, steamlink %}
+{% set nav = 'verify' %}
+{% block title %}Verify &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Verify</h1>
+<p class="sub">{{ remaining }} unchecked &middot; {{ slots.checks_per_slot }} checks free a slot{% if slots.at_cap %} &middot; slots at cap{% endif %}</p>
+
+{% if not games %}<div class="empty">Nothing left to check.</div>{% endif %}
+
+{% for g in games %}
+<form class="qcard grain" method="post" action="/verify/{{ g.id }}">
+  <div class="shot"><div class="art">{{ art(g) }}</div></div>
+  <div class="body">
+    <h3><a href="/game/{{ g.id }}">{{ g.title }}</a></h3>
+    <div class="qmeta">
+      {% if g.section %}<span>{{ g.section }}</span>{% endif %}
+      {% if g.date_added %}<span>{{ g.date_added }}</span>{% endif %}
+      {% if g.store_url %}<span>{{ steamlink(g) }}</span>{% endif %}
+    </div>
+
+    <div class="seg yn" role="radiogroup" aria-label="Does it work?">
+      <input type="radio" name="works" id="wy-{{ g.id }}" value="yes" required>
+      <label class="yes" for="wy-{{ g.id }}">Works</label>
+      <input type="radio" name="works" id="wn-{{ g.id }}" value="no">
+      <label class="no" for="wn-{{ g.id }}">Doesn't work</label>
+    </div>
+
+    <div style="margin-top:12px">
+      <label class="lbl" for="n-{{ g.id }}">Notes</label>
+      <textarea name="notes" id="n-{{ g.id }}" style="min-height:56px">{{ g.notes or '' }}</textarea>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button class="primary" type="submit">Submit</button>
+    </div>
+  </div>
+</form>
+{% endfor %}
+{% endblock %}

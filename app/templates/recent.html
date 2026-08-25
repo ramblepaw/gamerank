@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "macros.html" import tile %}
+{% set nav = 'recent' %}
+{% block title %}Recent &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Last {{ n }} added</h1>
+<p class="sub">
+  {% for c in [25, 50, 100, 200] %}<a href="/recent?n={{ c }}">{{ c }}</a>{{ ' · ' if not loop.last }}{% endfor %}
+  &middot; <a href="/export.txt?scope=recent&n={{ n }}&fmt=markdown" target="_blank">markdown</a>
+  &middot; <a href="/export.txt?scope=recent&n={{ n }}&fmt=title_appid" target="_blank">title + appid</a>
+  &middot; <a href="/export.txt?scope=recent&n={{ n }}&fmt=titles" target="_blank">titles</a>
+</p>
+<p class="sub">Rows with no date on the sheet show {{ fallback_date }}.</p>
+
+<div class="grid">{% for g in games %}{{ tile(g) }}{% endfor %}</div>
+{% endblock %}

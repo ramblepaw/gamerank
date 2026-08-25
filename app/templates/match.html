@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% set nav = 'library' %}
+{% block title %}Match {{ g.title }} &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Pick a match</h1>
+<p class="sub">
+  For <a href="/game/{{ g.id }}">{{ g.title }}</a>.
+  {% if not igdb %}IGDB credentials aren't set, so there's nothing to search.{% endif %}
+</p>
+
+<form class="filters" method="get" action="/game/{{ g.id }}/match">
+  <div class="wide">
+    <label class="lbl" for="q">Search IGDB</label>
+    <input type="search" name="q" id="q" value="{{ term }}">
+  </div>
+  <div><button class="primary" type="submit">Search</button></div>
+</form>
+
+{% if not results %}
+  <div class="empty">No results for &ldquo;{{ term }}&rdquo;. Try a shorter or differently spelled title.</div>
+{% else %}
+<div class="grid">
+  {% for r in results %}
+  <form method="post" action="/game/{{ g.id }}/match">
+    <input type="hidden" name="igdb_id" value="{{ r.igdb_id }}">
+    <input type="hidden" name="term" value="{{ term }}">
+    <div class="tile" style="cursor:default">
+      <div class="art">
+        {% if r.cover_url %}
+          <img src="{{ r.cover_url }}" alt="" loading="lazy"
+               onerror="this.style.display='none';this.parentNode.classList.add('failed')">
+        {% else %}
+          <div class="noart">no art</div>
+        {% endif %}
+      </div>
+      <div class="name">{{ r.title }}</div>
+      <div class="meta">
+        {{ r.release_date or 'unreleased' }}{% if r.steam_appid %} &middot; steam{% endif %}
+      </div>
+    </div>
+    <label style="display:flex;gap:6px;align-items:center;color:var(--dim);font-size:12px;margin:6px 0">
+      <input type="checkbox" name="retitle" value="1" style="width:auto"> use this title
+    </label>
+    <button class="primary sm" type="submit" style="width:100%">Use this</button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
+<p style="margin-top:20px"><a class="btn" href="/game/{{ g.id }}">Back to game</a></p>
+{% endblock %}

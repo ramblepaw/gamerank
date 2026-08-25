@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set nav = 'wishlist' %}
+{% block title %}Wishlist &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Wishlist</h1>
+<p class="sub">Games you don't have yet. No slot cost until one moves to the library.</p>
+
+<form class="card grain" method="post" action="/wishlist" style="margin-bottom:18px">
+  <label class="lbl" for="text">Paste list</label>
+  <textarea name="text" id="text" required style="min-height:90px"
+    placeholder="* [Title](https://store.steampowered.com/app/123/)"></textarea>
+  <div class="row" style="margin-top:10px"><button class="primary" type="submit">Add</button></div>
+</form>
+
+{% if not items %}<div class="empty">Empty.</div>{% else %}
+<div class="tablewrap">
+<table>
+  <thead><tr><th></th><th>Title</th><th>Added by</th><th>When</th><th></th></tr></thead>
+  <tbody>
+  {% for it in items %}
+    <tr>
+      <td class="thumb">{% if it.cover_url %}<img src="{{ it.cover_url }}" alt="" loading="lazy"
+        onerror="this.style.visibility='hidden'">{% endif %}</td>
+      <td>{% if it.store_url %}<a href="{{ it.store_url }}" target="_blank" rel="noopener">{{ it.title }}</a>
+          {% else %}{{ it.title }}{% endif %}</td>
+      <td style="color:var(--dim)">{{ it.display_name or '—' }}</td>
+      <td style="color:var(--dim)">{{ it.created_at[:10] }}</td>
+      <td>
+        <form method="post" action="/wishlist/{{ it.id }}/promote" style="display:inline">
+          <button class="sm" type="submit">Move to library</button>
+        </form>
+        <form method="post" action="/wishlist/{{ it.id }}/delete" style="display:inline">
+          <button class="bad sm" type="submit">Drop</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

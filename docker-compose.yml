@@ -1,0 +1,21 @@
+services:
+  gamerank:
+    container_name: gamerank
+    image: ghcr.io/OWNER/gamerank:latest
+    ports:
+      # host:container - change the left number if the port is taken.
+      - '8090:8080'
+    restart: unless-stopped
+    # Set to a uid:gid that can write the mounted volume, or drop the line.
+    # user: '1000:1000'
+    environment:
+      GRT_DATA_DIR: /data
+      GRT_QUEUE_SIZE: '5'
+      # Read from a .env file next to this compose file, so no secret ends up
+      # in the repo. See .env.example.
+      GRT_SECRET: ${GRT_SECRET:?set GRT_SECRET in .env}
+      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
+      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
+    volumes:
+      # Wherever you want the database and CSV exports kept.
+      - './data:/data'

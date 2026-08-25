@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-theme="archive" data-motion="on">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in &middot; GameRank</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main style="max-width:340px;margin-top:14vh">
+  <h1>GameRank</h1>
+  {% if error %}<div class="card grain" style="border-color:var(--bad);margin-bottom:12px">{{ error }}</div>{% endif %}
+  <form method="post" action="/login" class="card grain">
+    <label class="lbl" for="username">User</label>
+    {% if users %}
+    <select name="username" id="username">
+      {% for u in users %}<option value="{{ u.username }}">{{ u.display_name }}</option>{% endfor %}
+    </select>
+    {% else %}
+    <input type="text" name="username" id="username" value="admin">
+    {% endif %}
+    <div style="height:10px"></div>
+    <label class="lbl" for="password">Password</label>
+    <input type="password" name="password" id="password" autocomplete="current-password">
+    <div style="height:12px"></div>
+    <button class="primary" type="submit" style="width:100%">Sign in</button>
+  </form>
+</main>
+</body>
+</html>

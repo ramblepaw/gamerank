@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set nav = 'admin' %}
+{% block title %}Import done &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Import done</h1>
+<div class="flash">
+  {{ result.inserted }} games, {{ result.sections | length }} sections.
+  Slots seeded to {{ result.seeded_balance }} ({{ result.intake_unverified }} unverified in intake).
+  {{ result.no_date }} rows had no date and got the fallback.
+</div>
+
+<div class="split">
+  <div>
+    {% if result.duplicates %}
+    <h2>Duplicate titles ({{ result.duplicates | length }})</h2>
+    <div class="card log">
+      <ul class="plain">{% for d in result.duplicates %}<li>{{ d }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% if result.warnings %}
+    <h2>Warnings ({{ result.warnings | length }})</h2>
+    <div class="card log">
+      <ul class="plain">{% for w in result.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+  </div>
+  <div>
+    <h2>Sections</h2>
+    <div class="card log">
+      <ul class="plain">{% for s in result.sections %}<li>{{ s }}</li>{% endfor %}</ul>
+    </div>
+    <p style="margin-top:14px">
+      <a class="btn" href="/">Overview</a>
+      <a class="btn" href="/admin">Fetch cover art</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

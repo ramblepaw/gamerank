@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% set nav = 'look' %}
+{% block title %}Look &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Look</h1>
+<p class="sub">Yours only. {{ user.display_name }}'s settings don't touch anyone else's.</p>
+
+<form method="post" action="/look">
+  <h2>Theme</h2>
+  <div class="grid" style="--tile:190px">
+    {% for id, name, blurb in themes %}
+    <label class="themepick" style="position:relative;display:block">
+      <input type="radio" name="theme" value="{{ id }}" {{ 'checked' if ui.theme == id }}>
+      <span class="themecard" data-theme="{{ id }}"
+            style="background:var(--panel);color:var(--text);display:block">
+        <span class="themerow">
+          <i style="background:var(--bg)"></i>
+          <i style="background:var(--panel-2)"></i>
+          <i style="background:linear-gradient(180deg,var(--accent-2),var(--accent))"></i>
+          <i style="background:var(--gS)"></i>
+          <i style="background:var(--gD)"></i>
+        </span>
+        <span class="tname"><b>{{ name }}</b><br>
+          <span style="color:var(--dim);font-size:12px">{{ blurb }}</span></span>
+      </span>
+    </label>
+    {% endfor %}
+  </div>
+
+  <h2>Accent</h2>
+  <div class="swatches">
+    <span class="swatch">
+      <input type="radio" name="accent" id="ac-default" value="" {{ 'checked' if not ui.accent }}>
+      <label for="ac-default" title="theme default"
+             style="background:linear-gradient(135deg,var(--accent-2),var(--accent))"></label>
+    </span>
+    {% for hex in accents %}
+    <span class="swatch">
+      <input type="radio" name="accent" id="ac-{{ hex }}" value="{{ hex }}" {{ 'checked' if ui.accent == hex }}>
+      <label for="ac-{{ hex }}" title="#{{ hex }}" style="background:#{{ hex }}"></label>
+    </span>
+    {% endfor %}
+  </div>
+  <p class="sub" style="margin-top:8px;font-size:12px">First swatch keeps whatever the theme ships with.</p>
+
+  <h2>Density</h2>
+  <div class="seg">
+    {% for d in densities %}
+    <input type="radio" name="density" id="d-{{ d }}" value="{{ d }}" {{ 'checked' if ui.density == d }}>
+    <label for="d-{{ d }}">{{ d }}</label>
+    {% endfor %}
+  </div>
+
+  <h2>Cover size</h2>
+  <div class="seg">
+    {% for s in tile_sizes %}
+    <input type="radio" name="tile_size" id="t-{{ s }}" value="{{ s }}" {{ 'checked' if ui.tile_size == s }}>
+    <label for="t-{{ s }}">{{ s }}</label>
+    {% endfor %}
+  </div>
+
+  <h2>Motion</h2>
+  <div class="seg">
+    <input type="radio" name="motion" id="m-on" value="on" {{ 'checked' if ui.motion != 'off' }}>
+    <label for="m-on">on</label>
+    <input type="radio" name="motion" id="m-off" value="off" {{ 'checked' if ui.motion == 'off' }}>
+    <label for="m-off">off</label>
+  </div>
+  <p class="sub" style="margin-top:8px;font-size:12px">
+    Off kills every transition and hover animation. Your OS reduced-motion setting already
+    does this on its own.
+  </p>
+
+  <div class="row" style="margin-top:22px">
+    <button class="primary" type="submit">Save</button>
+    <a class="btn" href="/">Back</a>
+  </div>
+</form>
+{% endblock %}

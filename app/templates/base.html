@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" data-theme="{{ ui.theme }}" data-density="{{ ui.density }}" data-motion="{{ ui.motion }}"
+      style="{% if ui.accent %}--accent-user:#{{ ui.accent }};{% endif %}--tile:{{ ui.tile_px }}px">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}GameRank{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if user %}
+<header class="top grain">
+  <div class="top-inner">
+    <div class="brand">GameRank</div>
+    <nav>
+      <a href="/" class="{{ 'on' if nav == 'dash' }}">Overview</a>
+      <a href="/verify" class="{{ 'on' if nav == 'verify' }}">Verify</a>
+      <a href="/grade" class="{{ 'on' if nav == 'grade' }}">Grade</a>
+      <a href="/broken" class="{{ 'on' if nav == 'broken' }}">Broken{% if broken_count %}<span class="badge">{{ broken_count }}</span>{% endif %}</a>
+      <a href="/removal" class="{{ 'on' if nav == 'removal' }}">Removal</a>
+      <a href="/library" class="{{ 'on' if nav == 'library' }}">Library</a>
+      <a href="/recent" class="{{ 'on' if nav == 'recent' }}">Recent</a>
+      <a href="/needs-art" class="{{ 'on' if nav == 'needsart' }}">Needs art{% if no_art_count %}<span class="badge">{{ no_art_count }}</span>{% endif %}</a>
+      <a href="/add" class="{{ 'on' if nav == 'add' }}">Add</a>
+      <a href="/wishlist" class="{{ 'on' if nav == 'wishlist' }}">Wishlist</a>
+      <a href="/look" class="{{ 'on' if nav == 'look' }}">Look</a>
+      {% if user.is_admin %}<a href="/admin" class="{{ 'on' if nav == 'admin' }}">Admin</a>{% endif %}
+    </nav>
+    <div class="who">
+      <span class="slotpill {{ 'out' if slots.balance <= 0 else ('low' if slots.balance <= 10 else '') }}">
+        <b>{{ slots.balance }}</b>/{{ slots.limit }} slots
+      </span>
+      <a href="/logout">{{ user.display_name }}</a>
+    </div>
+  </div>
+</header>
+{% endif %}
+<main>
+{% block body %}{% endblock %}
+</main>
+<script>
+// Not every game has portrait boxart - some only have a 460x215 header.
+// Cropping those to 2:3 destroys them, so wide art gets letterboxed instead.
+(function () {
+  function fit(img) {
+    if (img.naturalWidth && img.naturalWidth > img.naturalHeight) img.classList.add('wide');
+  }
+  document.querySelectorAll('.art img').forEach(function (img) {
+    if (img.complete) fit(img); else img.addEventListener('load', function () { fit(img); });
+  });
+})();
+</script>
+</body>
+</html>

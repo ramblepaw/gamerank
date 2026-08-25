@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% set nav = 'admin' %}
+{% block title %}Covers &middot; GameRank{% endblock %}
+{% block body %}
+<h1>{% if igdb_test is defined and igdb_test %}IGDB connection{% else %}Cover art{% endif %}</h1>
+{% if igdb_test is defined and igdb_test %}
+  <div class="flash {{ '' if igdb_test.ok else 'warn' }}">{{ igdb_test.detail }}</div>
+{% else %}
+  <div class="flash {{ 'warn' if not found }}">Tried {{ tried }}, found {{ found }}.</div>
+{% endif %}
+<p><a class="btn" href="/admin">Back to admin</a> <a class="btn" href="/library">Library</a></p>
+{% endblock %}
