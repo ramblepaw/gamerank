@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import time
 from urllib.parse import urlencode, urlparse
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends, HTTPException
@@ -393,7 +394,7 @@ def recent(request: Request, n: int = 50, user=Depends(require_user)):
 
 
 @app.get("/game/{game_id}", response_class=HTMLResponse)
-def game_detail(request: Request, game_id: int, user=Depends(require_user)):
+def game_detail(request: Request, game_id: int, err: str = "", user=Depends(require_user)):
     with db() as conn:
         row = conn.execute(
             "SELECT g.*, gu.username AS grader, vu.username AS verifier FROM games g"
@@ -404,7 +405,7 @@ def game_detail(request: Request, game_id: int, user=Depends(require_user)):
         history = [dict(r) for r in conn.execute(
             "SELECT a.*, u.username AS display_name FROM audit a LEFT JOIN users u ON u.id = a.user_id"
             " WHERE a.game_id = ? ORDER BY a.id DESC LIMIT 30", (game_id,))]
-    return render(request, "game.html", user=user, g=dict(row), history=history,
+    return render(request, "game.html", user=user, g=dict(row), history=history, err=err,
                   grades=GRADES, broken_statuses=BROKEN_STATUSES,
                   igdb=metadata.igdb_available())
 
@@ -453,6 +454,71 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
              store_url.strip() or None, today(), now(), game_id))
         log_audit(conn, game_id, user["id"], "edited", "")
     exporter.export(tag="edit")
+    return RedirectResponse("/game/%d" % game_id, status_code=303)
+
+
+COVER_DIR = os.path.join(DATA_DIR, "covers")
+COVER_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+               "image/gif": ".gif", "image/avif": ".avif"}
+COVER_MAX = 8 * 1024 * 1024
+
+
+@app.post("/game/{game_id}/cover")
+async def game_cover(request: Request, game_id: int, file: UploadFile = File(...),
+                     user=Depends(require_user)):
+    """Upload a cover from disk, for the games IGDB will never have."""
+    ext = COVER_TYPES.get((file.content_type or "").lower())
+    if not ext:
+        return RedirectResponse("/game/%d?err=Not+an+image" % game_id, status_code=303)
+    data = await file.read(COVER_MAX + 1)
+    if len(data) > COVER_MAX:
+        return RedirectResponse("/game/%d?err=Image+is+over+8MB" % game_id, status_code=303)
+
+    os.makedirs(COVER_DIR, exist_ok=True)
+    for old in os.listdir(COVER_DIR):
+        if old.rsplit(".", 1)[0] == str(game_id):
+            try:
+                os.remove(os.path.join(COVER_DIR, old))
+            except OSError:
+                pass
+    with open(os.path.join(COVER_DIR, "%d%s" % (game_id, ext)), "wb") as fh:
+        fh.write(data)
+
+    # Cache-busted, and marked manual so the art job leaves it alone.
+    with db() as conn:
+        conn.execute("UPDATE games SET cover_url = ?, meta_source = 'manual', updated_at = ?"
+                     " WHERE id = ?",
+                     ("/cover/%d?v=%s" % (game_id, int(time.time())), now(), game_id))
+        log_audit(conn, game_id, user["id"], "cover", "uploaded")
+    return RedirectResponse("/game/%d" % game_id, status_code=303)
+
+
+@app.get("/cover/{game_id}")
+def cover_file(game_id: int, v: str = ""):
+    try:
+        names = os.listdir(COVER_DIR)
+    except OSError:
+        raise HTTPException(404, "No uploaded cover.")
+    for name in names:
+        if name.rsplit(".", 1)[0] == str(game_id):
+            return FileResponse(os.path.join(COVER_DIR, name),
+                                headers={"Cache-Control": "public, max-age=604800"})
+    raise HTTPException(404, "No uploaded cover.")
+
+
+@app.post("/game/{game_id}/cover/clear")
+def game_cover_clear(request: Request, game_id: int, user=Depends(require_user)):
+    """Drop the upload and let the art job manage it again."""
+    try:
+        for name in os.listdir(COVER_DIR):
+            if name.rsplit(".", 1)[0] == str(game_id):
+                os.remove(os.path.join(COVER_DIR, name))
+    except OSError:
+        pass
+    with db() as conn:
+        conn.execute("UPDATE games SET cover_url = NULL, meta_source = NULL, updated_at = ?"
+                     " WHERE id = ?", (now(), game_id))
+        log_audit(conn, game_id, user["id"], "cover", "removed")
     return RedirectResponse("/game/%d" % game_id, status_code=303)
 
 

@@ -21,6 +21,24 @@
     <div class="art" style="aspect-ratio:2/3;background:#17120f;border:1px solid var(--line-2);overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.34)">
       {{ art(g) }}
     </div>
+    {% if err %}<div class="flash warn" style="margin-top:10px">{{ err }}</div>{% endif %}
+
+    <form method="post" action="/game/{{ g.id }}/cover" enctype="multipart/form-data"
+          style="margin-top:10px">
+      <label class="lbl" for="coverfile">Upload a cover</label>
+      <input type="file" name="file" id="coverfile" accept="image/*" required
+             onchange="this.form.submit()">
+      <p class="sub" style="font-size:11px;margin:6px 0 0">
+        Uploads immediately. Kept in the data folder and never overwritten by the
+        art fetch, so it's the way to handle games IGDB doesn't carry.
+      </p>
+    </form>
+    {% if g.meta_source == 'manual' %}
+    <form method="post" action="/game/{{ g.id }}/cover/clear" style="margin-top:8px">
+      <button class="bad sm" type="submit" style="width:100%">Remove uploaded cover</button>
+    </form>
+    {% endif %}
+
     <form method="post" action="/game/{{ g.id }}/fetch" style="margin-top:10px">
       <button type="submit" style="width:100%">Fetch metadata</button>
     </form>

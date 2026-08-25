@@ -42,8 +42,8 @@
   <div><button class="primary" type="submit" id="applybtn">Apply</button></div>
 </form>
 
-{% set qs = 'q=' ~ f.q ~ '&verified=' ~ f.verified ~ '&grade=' ~ f.grade ~ '&keep=' ~ f.keep ~ '&section=' ~ f.section ~ '&status=' ~ f.status ~ '&sort=' ~ f.sort %}
 {% set active = f.q or f.verified or f.grade or f.keep or f.section or f.sort != 'title' or f.status != 'active' %}
+{% set qs = 'q=' ~ f.q ~ '&verified=' ~ f.verified ~ '&grade=' ~ f.grade ~ '&keep=' ~ f.keep ~ '&section=' ~ f.section ~ '&status=' ~ f.status ~ '&sort=' ~ f.sort %}
 <p class="sub">
   <a href="/library?{{ qs }}&view={{ 'list' if view == 'grid' else 'grid' }}">{{ 'list view' if view == 'grid' else 'grid view' }}</a>
   &middot; <a href="/export.txt?scope=all&fmt=markdown&n=3000" target="_blank">text list</a>
@@ -54,7 +54,18 @@
 </p>
 
 {% if not games %}
-  <div class="empty">Nothing matches.</div>
+  <div class="empty">
+    Nothing matches.
+    {% if active %}
+      <div style="margin-top:12px">
+        Filters are still narrowing this{% if f.q %} &mdash; &ldquo;{{ f.q }}&rdquo; may well be in
+        the library but excluded by them{% endif %}.
+        <div style="margin-top:10px">
+          <a class="btn" href="/library?q={{ f.q | urlencode }}&status=active&sort=title&view={{ view }}">Search everything</a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
 {% elif view == 'grid' %}
   <div class="grid" id="results">{% include "_library_items.html" %}</div>
 {% else %}

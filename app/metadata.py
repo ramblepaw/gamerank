@@ -597,9 +597,17 @@ def _typo_pass(title: str, wanted: str) -> dict:
 def apply(conn, game_id: int, meta: dict, overwrite_title: bool = False) -> None:
     if not meta:
         return
+
+    # A hand-picked image outranks anything fetched. Without this, uploading a
+    # cover and then running the art job silently throws it away.
+    row = conn.execute("SELECT meta_source FROM games WHERE id = ?", (game_id,)).fetchone()
+    keep_cover = bool(row and row["meta_source"] == "manual")
+
     sets, params = [], []
     for column in ("steam_appid", "igdb_id", "cover_url", "store_url",
                    "release_date", "meta_source"):
+        if column in ("cover_url", "meta_source") and keep_cover:
+            continue
         if meta.get(column):
             sets.append("%s = ?" % column)
             params.append(meta[column])
