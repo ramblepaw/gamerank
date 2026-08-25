@@ -646,8 +646,25 @@ def add_preview(request: Request, text: str = Form(...), user=Depends(require_us
 async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form(""),
                       user=Depends(require_user)):
     items = paste.parse(text)
-    added, updated, skipped = [], [], []
+    added, updated, refreshed, skipped = [], [], [], []
     form = await request.form()
+
+    def mark_updated(conn, game_id, item):
+        """A new build of a game already on the server.
+
+        It costs a slot and goes back to unverified, because re-downloading and
+        re-checking it is the same work as a new game - and an update is the
+        most likely moment for something that used to run to stop running. The
+        grade and playtime survive; those are opinions about the game, not the
+        build. Any broken state is cleared, since the update may well be the fix.
+        """
+        conn.execute(
+            "UPDATE games SET verified = 0, verified_by = NULL, verified_at = NULL,"
+            " broken = 0, broken_status = NULL, last_updated = ?, updated_at = ?"
+            " WHERE id = ?", (today(), now(), game_id))
+        slots.spend(conn, game_id, user["id"], "updated")
+        log_audit(conn, game_id, user["id"], "updated", "new build, back to unverified")
+        refreshed.append({"id": game_id, "title": item["title"]})
 
     def link_to(conn, game_id, item, retitle=False):
         """Attach the pasted link to a row that already exists. No slot spent."""
@@ -672,15 +689,25 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
             decision = str(form.get("decision_%d" % i, "")).strip()
 
             if found["kind"] == "exact":
+                gid = found["game"]["id"]
                 if item["steam_appid"] or item["url"]:
-                    link_to(conn, found["game"]["id"], item)
-                else:
+                    link_to(conn, gid, item)
+                elif decision != "update":
                     skipped.append(item["title"])
+                # An update is never assumed - pasting the same list twice
+                # would otherwise charge slots and unverify everything again.
+                if decision == "update":
+                    mark_updated(conn, gid, item)
                 continue
 
             if found["kind"] == "near":
                 # Nothing happens to a near match unless it was confirmed on
                 # the preview screen.
+                if decision.startswith("update:"):
+                    gid = int(decision.split(":", 1)[1])
+                    link_to(conn, gid, item, retitle=(form.get("retitle_%d" % i) == "1"))
+                    mark_updated(conn, gid, item)
+                    continue
                 if decision.startswith("link:"):
                     gid = int(decision.split(":", 1)[1])
                     link_to(conn, gid, item, retitle=(form.get("retitle_%d" % i) == "1"))
@@ -710,7 +737,8 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
 
     exporter.export(tag="add")
     return render(request, "add.html", user=user, parsed=None,
-                  result={"added": added, "updated": updated, "skipped": skipped})
+                  result={"added": added, "updated": updated,
+                          "refreshed": refreshed, "skipped": skipped})
 
 
 # ----------------------------------------------------------------------- wishlist
