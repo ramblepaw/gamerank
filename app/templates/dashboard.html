@@ -34,6 +34,7 @@
   <div>
     <div class="n">{{ removed_total }}</div>
     <div class="l">removed</div>
+    {% if removed_total %}<div class="hint"><a href="/library?status=removed">see them</a></div>{% endif %}
   </div>
   <div>
     <div class="n">{{ no_art_count }}</div>
