@@ -4,12 +4,14 @@
 {% block title %}{{ g.title }} &middot; GameRank{% endblock %}
 {% block body %}
 
+<p class="crumbs"><a href="/library">&larr; Masterlist</a>{% if g.section %} <span>/</span> <a href="/library?section={{ g.section | urlencode }}">{{ g.section }}</a>{% endif %}</p>
 <h1>{{ g.title }}</h1>
 <p class="sub">
   #{{ g.id }}
   {% if g.verified %}<span class="tag ok">checked{% if g.verifier %} &middot; {{ g.verifier }}{% endif %}</span>
   {% else %}<span class="tag dim">unchecked</span>{% endif %}
   {% if g.broken %}<span class="tag no">{{ (g.broken_status or 'broken').replace('_', ' ') }}</span>{% endif %}
+  {% if g.slated_at %}<span class="tag no">slated for removal</span>{% endif %}
   {% if g.status == 'removed' %}<span class="tag warn">removed</span>{% endif %}
   {% if g.store_url %}&middot; <a href="{{ g.store_url }}" target="_blank" rel="noopener">store page</a>{% endif %}
 </p>
@@ -27,6 +29,17 @@
       {% if igdb %}IGDB for art, Steam for the store link.{% else %}Steam only - IGDB needs Twitch credentials.{% endif %}
       {% if g.meta_source %} Last from {{ g.meta_source }}.{% endif %}
     </p>
+
+    <h2>Delete</h2>
+    <form class="card grain" method="post" action="/game/{{ g.id }}/delete"
+          onsubmit="return confirm('Delete {{ g.title }} from the tracker for good? Use Slate instead if you mean to cull it.')">
+      <input type="hidden" name="confirm" value="delete">
+      <p class="sub" style="margin:0 0 10px;font-size:12px">
+        Erases the row and its history. For test entries and mistakes &mdash; culling a
+        game you actually own is what Slate is for, since that keeps the record.
+      </p>
+      <button class="bad" type="submit" style="width:100%">Delete permanently</button>
+    </form>
 
     <h2>Log</h2>
     <div class="card log">
@@ -129,7 +142,11 @@
         <button class="primary" type="submit">Save</button>
         <a class="btn" href="/library">Library</a>
         {% if g.status == 'active' %}
-        <button class="bad" type="submit" formaction="/game/{{ g.id }}/remove" formnovalidate>Mark removed</button>
+          {% if g.slated_at %}
+          <button type="submit" formaction="/game/{{ g.id }}/unslate" formnovalidate>Take off removal list</button>
+          {% else %}
+          <button class="bad" type="submit" formaction="/game/{{ g.id }}/slate" formnovalidate>Slate for removal</button>
+          {% endif %}
         {% else %}
         <button type="submit" formaction="/game/{{ g.id }}/restore" formnovalidate>Restore</button>
         {% endif %}

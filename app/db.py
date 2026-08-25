@@ -206,6 +206,8 @@ MIGRATIONS = [
     ("users", "density", "TEXT"),
     ("users", "tile_size", "TEXT"),
     ("users", "motion", "TEXT"),
+    # Slated = still on the server, queued for the next batch deletion.
+    ("games", "slated_at", "TEXT"),
 ]
 
 

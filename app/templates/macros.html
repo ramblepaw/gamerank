@@ -7,18 +7,38 @@
   {% endif %}
 {% endmacro %}
 
+{# The whole tile can't be one <a>: it carries its own buttons, and an anchor
+   can't contain a form. The art is the link; the actions sit over it. #}
 {% macro tile(g) %}
-<a class="tile" href="/game/{{ g.id }}">
+<div class="tile">
   <div class="art">
-    {{ art(g) }}
+    <a class="artlink" href="/game/{{ g.id }}" aria-label="{{ g.title }}">{{ art(g) }}</a>
     {% if g.grade %}<span class="corner grade-letter g-{{ g.grade }}">{{ g.grade }}</span>{% endif %}
     <span class="flagrow">
       {% if not g.verified %}<span class="tag dim">unchecked</span>{% endif %}
       {% if g.broken %}<span class="tag no">broken</span>{% endif %}
-      {% if g.keep_flag == 'remove' %}<span class="tag no">cut</span>{% endif %}
+      {% if g.slated_at %}<span class="tag no">slated</span>{% endif %}
+      {% if g.keep_flag == 'remove' and not g.slated_at %}<span class="tag no">cut</span>{% endif %}
+    </span>
+    <span class="tileacts">
+      {% if g.store_url %}
+        <a class="tileact" href="{{ g.store_url }}" target="_blank" rel="noopener"
+           title="Store page">store</a>
+      {% endif %}
+      {% if g.status == 'active' %}
+        {% if g.slated_at %}
+        <form method="post" action="/game/{{ g.id }}/unslate">
+          <button class="tileact" type="submit" title="Take off the removal list">keep</button>
+        </form>
+        {% else %}
+        <form method="post" action="/game/{{ g.id }}/slate">
+          <button class="tileact danger" type="submit" title="Add to the removal list">remove</button>
+        </form>
+        {% endif %}
+      {% endif %}
     </span>
   </div>
-  <div class="name">{{ g.title }}</div>
+  <a class="name" href="/game/{{ g.id }}">{{ g.title }}</a>
   {# The date shown is the one the list is ordered by: an update supersedes
      the date the game was first added. #}
   {% set shown = g.touched or g.last_updated or g.date_added %}
@@ -27,7 +47,7 @@
     {%- if g.last_updated and g.last_updated == shown and g.date_added != shown %} upd{% endif -%}
     {%- if g.playtime_minutes is not none %} &middot; {{ g.playtime_minutes }}m{% endif -%}
   </div>
-</a>
+</div>
 {% endmacro %}
 
 {% macro thumb(g) %}

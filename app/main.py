@@ -465,24 +465,70 @@ def game_match_pick(request: Request, game_id: int, igdb_id: int = Form(...),
     return RedirectResponse("/game/%d" % game_id, status_code=303)
 
 
-@app.post("/game/{game_id}/remove")
-def game_remove(request: Request, game_id: int, user=Depends(require_user)):
+def _back_to(request: Request, fallback: str) -> str:
+    """Send the user back where they came from, not to a fixed page."""
+    ref = request.headers.get("referer") or ""
+    return ref if ref.startswith("http") else fallback
+
+
+@app.post("/game/{game_id}/slate")
+def game_slate(request: Request, game_id: int, user=Depends(require_user)):
+    """Queue for the next batch deletion. The game is still on the server."""
     with db() as conn:
-        conn.execute("UPDATE games SET status = 'removed', removed_at = ?, updated_at = ?"
-                     " WHERE id = ?", (now(), now(), game_id))
-        log_audit(conn, game_id, user["id"], "removed", "")
-    exporter.export(tag="remove")
-    return RedirectResponse(request.headers.get("referer", "/removal"), status_code=303)
+        conn.execute("UPDATE games SET slated_at = ?, updated_at = ? WHERE id = ?",
+                     (now(), now(), game_id))
+        log_audit(conn, game_id, user["id"], "slated", "queued for removal")
+    return RedirectResponse(_back_to(request, "/removal"), status_code=303)
+
+
+@app.post("/game/{game_id}/unslate")
+def game_unslate(request: Request, game_id: int, user=Depends(require_user)):
+    with db() as conn:
+        conn.execute("UPDATE games SET slated_at = NULL, updated_at = ? WHERE id = ?",
+                     (now(), game_id))
+        log_audit(conn, game_id, user["id"], "unslated", "taken off the removal list")
+    return RedirectResponse(_back_to(request, "/removal"), status_code=303)
+
+
+@app.post("/removal/commit")
+def removal_commit(request: Request, user=Depends(require_user)):
+    """Everything slated is now actually gone from the server."""
+    with db() as conn:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id, title FROM games WHERE slated_at IS NOT NULL AND status = 'active'")]
+        for row in rows:
+            conn.execute(
+                "UPDATE games SET status = 'removed', removed_at = ?, slated_at = NULL,"
+                " updated_at = ? WHERE id = ?", (now(), now(), row["id"]))
+            log_audit(conn, row["id"], user["id"], "removed", "batch")
+    if rows:
+        exporter.export(tag="removed-batch")
+    return RedirectResponse("/removal", status_code=303)
 
 
 @app.post("/game/{game_id}/restore")
 def game_restore(request: Request, game_id: int, user=Depends(require_user)):
     with db() as conn:
-        conn.execute("UPDATE games SET status = 'active', removed_at = NULL, updated_at = ?"
-                     " WHERE id = ?", (now(), game_id))
+        conn.execute("UPDATE games SET status = 'active', removed_at = NULL, slated_at = NULL,"
+                     " updated_at = ? WHERE id = ?", (now(), game_id))
         log_audit(conn, game_id, user["id"], "restored", "")
     exporter.export(tag="restore")
     return RedirectResponse("/game/%d" % game_id, status_code=303)
+
+
+@app.post("/game/{game_id}/delete")
+def game_delete(request: Request, game_id: int, confirm: str = Form(""),
+                user=Depends(require_user)):
+    """Erase the row outright. For mistakes and test data, not for culling."""
+    if confirm != "delete":
+        return RedirectResponse("/game/%d" % game_id, status_code=303)
+    with db() as conn:
+        conn.execute("DELETE FROM queue_slots WHERE game_id = ?", (game_id,))
+        conn.execute("DELETE FROM audit WHERE game_id = ?", (game_id,))
+        conn.execute("UPDATE slot_events SET game_id = NULL WHERE game_id = ?", (game_id,))
+        conn.execute("DELETE FROM games WHERE id = ?", (game_id,))
+    exporter.export(tag="delete")
+    return RedirectResponse("/library", status_code=303)
 
 
 # ------------------------------------------------------------------------- broken
@@ -534,12 +580,18 @@ def removal(request: Request, user=Depends(require_user)):
         rows = [dict(r) for r in conn.execute(
             "SELECT g.*, u.username AS grader FROM games g"
             " LEFT JOIN users u ON u.id = g.graded_by WHERE " + REMOVAL_SQL_G +
+            " AND g.slated_at IS NULL"
             " ORDER BY CASE WHEN g.broken_status = 'unfixable' THEN 0"
             " WHEN g.keep_flag = 'remove' THEN 1 WHEN g.grade = 'D' THEN 2 ELSE 3 END,"
             " COALESCE(g.playtime_minutes, 0) ASC, g.title COLLATE NOCASE")]
+        slated = [dict(r) for r in conn.execute(
+            "SELECT g.*, u.username AS grader FROM games g"
+            " LEFT JOIN users u ON u.id = g.graded_by"
+            " WHERE g.slated_at IS NOT NULL AND g.status = 'active'"
+            " ORDER BY g.slated_at, g.title COLLATE NOCASE")]
         total = conn.execute(
             "SELECT COUNT(*) AS n FROM games WHERE status = 'active'").fetchone()["n"]
-    return render(request, "removal.html", user=user, games=rows, total=total)
+    return render(request, "removal.html", user=user, games=rows, slated=slated, total=total)
 
 
 # ----------------------------------------------------------------------- add/paste
@@ -960,6 +1012,10 @@ def export_text(request: Request, fmt: str = "markdown", scope: str = "recent",
         sql = ("SELECT * FROM games WHERE status = 'active' AND section = ?"
                " ORDER BY title COLLATE NOCASE LIMIT ?")
         params = (section, n)
+    elif scope == "slated":
+        sql = ("SELECT * FROM games WHERE slated_at IS NOT NULL AND status = 'active'"
+               " ORDER BY title COLLATE NOCASE LIMIT ?")
+        params = (n,)
     elif scope == "removal":
         sql = "SELECT * FROM games WHERE " + REMOVAL_SQL + " ORDER BY title COLLATE NOCASE LIMIT ?"
         params = (n,)
