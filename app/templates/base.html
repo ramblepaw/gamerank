@@ -67,16 +67,7 @@
 {% block body %}{% endblock %}
 </main>
 <script>
-// Not every game has portrait boxart - some only have a wide header image.
-// Cropping those to 2:3 destroys them, so wide art gets letterboxed instead.
 (function () {
-  function fit(img) {
-    if (img.naturalWidth && img.naturalWidth > img.naturalHeight) img.classList.add('wide');
-  }
-  document.querySelectorAll('.art img').forEach(function (img) {
-    if (img.complete) fit(img); else img.addEventListener('load', function () { fit(img); });
-  });
-
   // One menu open at a time, and clicking away or pressing Escape closes it.
   var menus = [].slice.call(document.querySelectorAll('details.menu'));
   menus.forEach(function (m) {

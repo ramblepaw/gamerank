@@ -127,7 +127,6 @@
         if (html.trim()) {
           results.insertAdjacentHTML('beforeend', html);
           page += 1;
-          fitWide(results);
         }
         busy = false;
         state.style.display = page >= pages ? 'none' : '';
@@ -150,14 +149,6 @@
   observer.observe(pager);
   check();
 
-  function fitWide(scope) {
-    scope.querySelectorAll('.art img').forEach(function (img) {
-      function fit() {
-        if (img.naturalWidth && img.naturalWidth > img.naturalHeight) img.classList.add('wide');
-      }
-      if (img.complete) fit(); else img.addEventListener('load', fit);
-    });
-  }
 })();
 </script>
 {% endblock %}

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="archive" data-motion="on">
+<html lang="en" data-theme="dusk" data-motion="on">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,22 +7,35 @@
 <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
 </head>
 <body>
-<main style="max-width:340px;margin-top:14vh">
+<main style="max-width:380px;margin-top:12vh">
   <h1>GameRank</h1>
-  {% if error %}<div class="card grain" style="border-color:var(--bad);margin-bottom:12px">{{ error }}</div>{% endif %}
+  <p class="sub">Sign in.</p>
+
+  {% if error %}<div class="flash warn">{{ error }}</div>{% endif %}
+
   <form method="post" action="/login" class="card grain">
-    <label class="lbl" for="username">User</label>
     {% if users %}
-    <select name="username" id="username">
-      {% for u in users %}<option value="{{ u.username }}">{{ u.display_name }}</option>{% endfor %}
-    </select>
+      {# Names shown outright. A dropdown hides who exists behind a click, on a
+         page whose only job is picking between two or three people. #}
+      <label class="lbl">Who are you?</label>
+      <div class="seg" style="flex-direction:column;align-items:stretch">
+        {% for u in users %}
+        <input type="radio" name="username" id="u-{{ u.id }}" value="{{ u.username }}"
+               {{ 'checked' if loop.first }}>
+        <label for="u-{{ u.id }}" style="text-align:left">{{ u.username }}</label>
+        {% endfor %}
+      </div>
     {% else %}
-    <input type="text" name="username" id="username" value="admin">
+      <label class="lbl" for="username">Username</label>
+      <input type="text" name="username" id="username" value="admin">
     {% endif %}
-    <div style="height:10px"></div>
+
+    <div style="height:14px"></div>
     <label class="lbl" for="password">Password</label>
     <input type="password" name="password" id="password" autocomplete="current-password">
-    <div style="height:12px"></div>
+    <p class="sub" style="font-size:12px;margin:6px 0 0">Leave blank if none is set.</p>
+
+    <div style="height:14px"></div>
     <button class="primary" type="submit" style="width:100%">Sign in</button>
   </form>
 </main>

@@ -468,12 +468,11 @@ COVER_W, COVER_H = 600, 900
 
 
 def _to_cover(data: bytes) -> bytes:
-    """Normalise an upload to one 600x900 JPEG.
+    """Normalise an upload to one 600x900 JPEG that fills the frame.
 
-    Anything near portrait is scaled to fill and centre-cropped, the way the
-    grid would crop it anyway. Something far off - a wide banner or a square
-    icon - is letterboxed instead, because cropping those throws away most of
-    the picture.
+    Always scaled to cover and centre-cropped, whatever shape it started as.
+    No padding: a cover with bars down the side reads as broken rather than as
+    a deliberate fit.
     """
     from PIL import Image, ImageOps
 
@@ -482,16 +481,7 @@ def _to_cover(data: bytes) -> bytes:
     if src.mode not in ("RGB", "L"):
         src = src.convert("RGB")
 
-    target = COVER_W / COVER_H
-    ratio = src.width / max(1, src.height)
-    if 0.62 <= ratio / target <= 1.6:
-        out = ImageOps.fit(src, (COVER_W, COVER_H), method=Image.LANCZOS, centering=(0.5, 0.5))
-    else:
-        out = Image.new("RGB", (COVER_W, COVER_H), (18, 15, 22))
-        scaled = src.copy()
-        scaled.thumbnail((COVER_W, COVER_H), Image.LANCZOS)
-        out.paste(scaled, ((COVER_W - scaled.width) // 2, (COVER_H - scaled.height) // 2))
-
+    out = ImageOps.fit(src, (COVER_W, COVER_H), method=Image.LANCZOS, centering=(0.5, 0.5))
     buf = io.BytesIO()
     out.convert("RGB").save(buf, "JPEG", quality=88, optimize=True)
     return buf.getvalue()
