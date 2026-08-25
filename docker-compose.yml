@@ -16,6 +16,12 @@ services:
       GRT_SECRET: ${GRT_SECRET:?set GRT_SECRET in .env}
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).status == 200 else 1)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       # Wherever you want the database and CSV exports kept.
       - './data:/data'
