@@ -23,14 +23,21 @@
     </div>
     {% if err %}<div class="flash warn" style="margin-top:10px">{{ err }}</div>{% endif %}
 
+    <p style="margin-top:10px">
+      <a class="btn" style="display:block;text-align:center"
+         href="https://duckduckgo.com/?iax=images&ia=images&q={{ (g.title ~ ' game cover art') | urlencode }}"
+         target="_blank" rel="noopener">Find an image &nearr;</a>
+    </p>
+
     <form method="post" action="/game/{{ g.id }}/cover" enctype="multipart/form-data"
-          style="margin-top:10px">
+          style="margin-top:8px">
       <label class="lbl" for="coverfile">Upload a cover</label>
       <input type="file" name="file" id="coverfile" accept="image/*" required
              onchange="this.form.submit()">
       <p class="sub" style="font-size:11px;margin:6px 0 0">
-        Uploads immediately. Kept in the data folder and never overwritten by the
-        art fetch, so it's the way to handle games IGDB doesn't carry.
+        Uploads immediately, resized to 600&times;900 so it sits in the grid like
+        every other cover. Kept in the data folder and never overwritten by the
+        art fetch, which is how to handle games IGDB doesn't carry.
       </p>
     </form>
     {% if g.meta_source == 'manual' %}

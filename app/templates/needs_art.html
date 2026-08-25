@@ -23,7 +23,11 @@
       <td><a href="/game/{{ g.id }}">{{ g.title }}</a> {{ steamlink(g) }}</td>
       <td style="color:var(--dim)">{{ g.section or '—' }}</td>
       <td style="color:var(--dim)">{{ g.date_added or '—' }}</td>
-      <td><a class="btn sm" href="/game/{{ g.id }}/match">Find a match</a></td>
+      <td>
+        <a class="btn sm" href="/game/{{ g.id }}/match">Find a match</a>
+        <a class="btn sm" target="_blank" rel="noopener"
+           href="https://duckduckgo.com/?iax=images&amp;ia=images&amp;q={{ (g.title ~ ' game cover art') | urlencode }}">Image search &nearr;</a>
+      </td>
     </tr>
   {% endfor %}
   </tbody>

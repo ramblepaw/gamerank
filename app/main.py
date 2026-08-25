@@ -1,4 +1,5 @@
 """GameRank - verification, grading and slot tracking for a game library."""
+import io
 import json
 import os
 import re
@@ -458,21 +459,59 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
 
 
 COVER_DIR = os.path.join(DATA_DIR, "covers")
-COVER_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
-               "image/gif": ".gif", "image/avif": ".avif"}
-COVER_MAX = 8 * 1024 * 1024
+COVER_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/avif",
+               "image/bmp", "image/tiff"}
+COVER_MAX = 16 * 1024 * 1024
+# Portrait boxart, matching what IGDB serves, so uploads sit in the grid at the
+# same size as everything else.
+COVER_W, COVER_H = 600, 900
+
+
+def _to_cover(data: bytes) -> bytes:
+    """Normalise an upload to one 600x900 JPEG.
+
+    Anything near portrait is scaled to fill and centre-cropped, the way the
+    grid would crop it anyway. Something far off - a wide banner or a square
+    icon - is letterboxed instead, because cropping those throws away most of
+    the picture.
+    """
+    from PIL import Image, ImageOps
+
+    src = Image.open(io.BytesIO(data))
+    src = ImageOps.exif_transpose(src)
+    if src.mode not in ("RGB", "L"):
+        src = src.convert("RGB")
+
+    target = COVER_W / COVER_H
+    ratio = src.width / max(1, src.height)
+    if 0.62 <= ratio / target <= 1.6:
+        out = ImageOps.fit(src, (COVER_W, COVER_H), method=Image.LANCZOS, centering=(0.5, 0.5))
+    else:
+        out = Image.new("RGB", (COVER_W, COVER_H), (18, 15, 22))
+        scaled = src.copy()
+        scaled.thumbnail((COVER_W, COVER_H), Image.LANCZOS)
+        out.paste(scaled, ((COVER_W - scaled.width) // 2, (COVER_H - scaled.height) // 2))
+
+    buf = io.BytesIO()
+    out.convert("RGB").save(buf, "JPEG", quality=88, optimize=True)
+    return buf.getvalue()
 
 
 @app.post("/game/{game_id}/cover")
 async def game_cover(request: Request, game_id: int, file: UploadFile = File(...),
                      user=Depends(require_user)):
     """Upload a cover from disk, for the games IGDB will never have."""
-    ext = COVER_TYPES.get((file.content_type or "").lower())
-    if not ext:
+    if (file.content_type or "").lower() not in COVER_TYPES:
         return RedirectResponse("/game/%d?err=Not+an+image" % game_id, status_code=303)
     data = await file.read(COVER_MAX + 1)
     if len(data) > COVER_MAX:
-        return RedirectResponse("/game/%d?err=Image+is+over+8MB" % game_id, status_code=303)
+        return RedirectResponse("/game/%d?err=Image+is+over+16MB" % game_id, status_code=303)
+
+    try:
+        data = _to_cover(data)
+    except Exception:
+        return RedirectResponse("/game/%d?err=That+image+could+not+be+read" % game_id,
+                                status_code=303)
 
     os.makedirs(COVER_DIR, exist_ok=True)
     for old in os.listdir(COVER_DIR):
@@ -481,7 +520,7 @@ async def game_cover(request: Request, game_id: int, file: UploadFile = File(...
                 os.remove(os.path.join(COVER_DIR, old))
             except OSError:
                 pass
-    with open(os.path.join(COVER_DIR, "%d%s" % (game_id, ext)), "wb") as fh:
+    with open(os.path.join(COVER_DIR, "%d.jpg" % game_id), "wb") as fh:
         fh.write(data)
 
     # Cache-busted, and marked manual so the art job leaves it alone.
