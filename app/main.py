@@ -11,7 +11,7 @@ from itsdangerous import URLSafeSerializer, BadSignature
 from . import slots, queues, exporter, importer, metadata, paste, jobs, themes
 from .db import (
     db, init_db, now, today, norm_title, log_audit, get_setting_conn, set_setting,
-    hash_password, verify_password, GRADES, BROKEN_STATUSES, EXPORT_DIR, FALLBACK_DATE,
+    hash_password, verify_password, GRADES, BROKEN_STATUSES, EXPORT_DIR, FALLBACK_DATE, DATA_DIR,
     THEMES, ACCENTS, DENSITIES, TILE_SIZES, THEME_TOKENS, DEFAULT_THEME,
 )
 
@@ -46,8 +46,44 @@ REMOVAL_SQL_G = (
 )
 
 
+def preflight() -> None:
+    """Fail with a readable reason rather than a traceback and a restart loop.
+
+    A container that can't write its volume exits instantly, and with a restart
+    policy that looks like the app flapping for no reason. Almost always it's
+    the mounted directory not being writable by the uid the container runs as.
+    """
+    import getpass
+    data_dir = os.environ.get("GRT_DATA_DIR", "")
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        probe = os.path.join(DATA_DIR, ".write-test")
+        with open(probe, "w") as fh:
+            fh.write("ok")
+        os.remove(probe)
+    except OSError as exc:
+        try:
+            who = "uid %d, gid %d" % (os.getuid(), os.getgid())
+        except AttributeError:                       # not POSIX
+            who = getpass.getuser()
+        raise SystemExit(
+            "\n"
+            "GameRank cannot write to its data directory.\n"
+            "  directory : %s%s\n"
+            "  running as: %s\n"
+            "  error     : %s\n\n"
+            "The database and CSV exports live there, so it has to be writable.\n"
+            "If this is a container, the mounted path on the host needs to be\n"
+            "owned by the uid above - for example:\n"
+            "  chown -R %s '<host path>'\n"
+            % (DATA_DIR, " (from GRT_DATA_DIR)" if data_dir else "", who, exc,
+               who.replace("uid ", "").replace(", gid ", ":") if "uid" in who else "1000:1000")
+        )
+
+
 @app.on_event("startup")
 def _startup():
+    preflight()
     init_db()
 
 
