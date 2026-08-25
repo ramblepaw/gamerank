@@ -295,7 +295,7 @@ def grade_submit(request: Request, game_id: int, grade: str = Form(""),
 def library(request: Request, q: str = "", verified: str = "", grade: str = "",
             keep: str = "", section: str = "", status: str = "active",
             sort: str = "title", view: str = "grid", page: int = 1,
-            user=Depends(require_user)):
+            partial: int = 0, user=Depends(require_user)):
     where, params = [], []
     if q.strip():
         where.append("g.title_norm LIKE ?")
@@ -314,7 +314,9 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
     if section:
         where.append("g.section = ?")
         params.append(section)
-    if status in ("active", "removed"):
+    if status == "slated":
+        where.append("g.status = 'active' AND g.slated_at IS NOT NULL")
+    elif status in ("active", "removed"):
         where.append("g.status = ?")
         params.append(status)
 
@@ -340,6 +342,12 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
         sections = [r["section"] for r in conn.execute(
             "SELECT DISTINCT section FROM games WHERE section IS NOT NULL ORDER BY section")
             if r["section"]]
+
+    if partial:
+        # Only the repeatable rows, for the infinite scroller to append.
+        return templates.TemplateResponse(
+            "_library_items.html",
+            {"request": request, "games": rows, "view": view})
 
     return render(request, "library.html", user=user, games=rows, total=total, page=page,
                   pages=max(1, (total + per - 1) // per), sections=sections, grades=GRADES,
