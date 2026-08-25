@@ -46,7 +46,7 @@ def _ordered_sections(conn):
 
 def build_rows() -> list:
     with db() as conn:
-        users = {r["id"]: r["display_name"] for r in conn.execute("SELECT id, display_name FROM users")}
+        users = {r["id"]: r["username"] for r in conn.execute("SELECT id, username FROM users")}
         games = conn.execute("SELECT * FROM games ORDER BY COALESCE(section, ''), id").fetchall()
         order = _ordered_sections(conn)
 

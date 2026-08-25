@@ -124,7 +124,7 @@ def render(request: Request, template: str, **ctx):
 def login_form(request: Request):
     with db() as conn:
         users = [dict(r) for r in conn.execute(
-            "SELECT id, username, display_name FROM users ORDER BY display_name")]
+            "SELECT id, username FROM users ORDER BY username")]
     return templates.TemplateResponse(
         "login.html", {"request": request, "users": users, "user": None,
                        "error": None, "asset_v": ASSET_V})
@@ -135,7 +135,7 @@ def login(request: Request, username: str = Form(...), password: str = Form(""))
     with db() as conn:
         row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         users = [dict(r) for r in conn.execute(
-            "SELECT id, username, display_name FROM users ORDER BY display_name")]
+            "SELECT id, username FROM users ORDER BY username")]
     if not row or not verify_password(password, row["password_hash"] or ""):
         return templates.TemplateResponse(
             "login.html",
@@ -298,7 +298,7 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
     with db() as conn:
         total = conn.execute("SELECT COUNT(*) AS n FROM games g" + clause, params).fetchone()["n"]
         rows = [dict(r) for r in conn.execute(
-            "SELECT g.*, u.display_name AS grader FROM games g"
+            "SELECT g.*, u.username AS grader FROM games g"
             " LEFT JOIN users u ON u.id = g.graded_by" + clause +
             " ORDER BY " + order + " LIMIT ? OFFSET ?", (*params, per, (page - 1) * per))]
         sections = [r["section"] for r in conn.execute(
@@ -317,7 +317,7 @@ def recent(request: Request, n: int = 50, user=Depends(require_user)):
     n = max(1, min(n, 500))
     with db() as conn:
         rows = [dict(r) for r in conn.execute(
-            "SELECT g.*, u.display_name AS grader,"
+            "SELECT g.*, u.username AS grader,"
             " MAX(COALESCE(g.last_updated, ''), COALESCE(g.date_added, '')) AS touched"
             " FROM games g LEFT JOIN users u ON u.id = g.graded_by"
             " WHERE g.status = 'active' ORDER BY touched DESC, g.id DESC LIMIT ?", (n,))]
@@ -329,13 +329,13 @@ def recent(request: Request, n: int = 50, user=Depends(require_user)):
 def game_detail(request: Request, game_id: int, user=Depends(require_user)):
     with db() as conn:
         row = conn.execute(
-            "SELECT g.*, gu.display_name AS grader, vu.display_name AS verifier FROM games g"
+            "SELECT g.*, gu.username AS grader, vu.username AS verifier FROM games g"
             " LEFT JOIN users gu ON gu.id = g.graded_by"
             " LEFT JOIN users vu ON vu.id = g.verified_by WHERE g.id = ?", (game_id,)).fetchone()
         if not row:
             raise HTTPException(404, "No such game.")
         history = [dict(r) for r in conn.execute(
-            "SELECT a.*, u.display_name FROM audit a LEFT JOIN users u ON u.id = a.user_id"
+            "SELECT a.*, u.username AS display_name FROM audit a LEFT JOIN users u ON u.id = a.user_id"
             " WHERE a.game_id = ? ORDER BY a.id DESC LIMIT 30", (game_id,))]
     return render(request, "game.html", user=user, g=dict(row), history=history,
                   grades=GRADES, broken_statuses=BROKEN_STATUSES,
@@ -458,7 +458,7 @@ def broken_list(request: Request, show: str = "open", user=Depends(require_user)
         clause += " AND COALESCE(broken_status, '') != 'unfixable'"
     with db() as conn:
         rows = [dict(r) for r in conn.execute(
-            "SELECT g.*, u.display_name AS verifier FROM games g"
+            "SELECT g.*, u.username AS verifier FROM games g"
             " LEFT JOIN users u ON u.id = g.verified_by"
             " WHERE " + clause + " ORDER BY g.broken_status, g.title COLLATE NOCASE")]
     return render(request, "broken.html", user=user, games=rows, show=show,
@@ -496,7 +496,7 @@ def broken_update(request: Request, game_id: int, broken_status: str = Form(...)
 def removal(request: Request, user=Depends(require_user)):
     with db() as conn:
         rows = [dict(r) for r in conn.execute(
-            "SELECT g.*, u.display_name AS grader FROM games g"
+            "SELECT g.*, u.username AS grader FROM games g"
             " LEFT JOIN users u ON u.id = g.graded_by WHERE " + REMOVAL_SQL_G +
             " ORDER BY CASE WHEN g.broken_status = 'unfixable' THEN 0"
             " WHEN g.keep_flag = 'remove' THEN 1 WHEN g.grade = 'D' THEN 2 ELSE 3 END,"
@@ -600,7 +600,7 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
 def wishlist(request: Request, user=Depends(require_user)):
     with db() as conn:
         rows = [dict(r) for r in conn.execute(
-            "SELECT w.*, u.display_name FROM wishlist w LEFT JOIN users u ON u.id = w.added_by"
+            "SELECT w.*, u.username AS display_name FROM wishlist w LEFT JOIN users u ON u.id = w.added_by"
             " ORDER BY w.created_at DESC")]
     return render(request, "wishlist.html", user=user, items=rows)
 
@@ -658,7 +658,7 @@ def wishlist_delete(request: Request, item_id: int, user=Depends(require_user)):
 def admin_page(request: Request, user=Depends(require_admin)):
     with db() as conn:
         users = [dict(r) for r in conn.execute(
-            "SELECT id, username, display_name, is_admin FROM users ORDER BY display_name")]
+            "SELECT id, username, is_admin FROM users ORDER BY username")]
         settings = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings")}
         events = [dict(r) for r in slots.recent_events(conn, 20)]
         no_cover = conn.execute(
@@ -694,15 +694,17 @@ def admin_slots(request: Request, balance: int = Form(...), user=Depends(require
 
 
 @app.post("/admin/users")
-def admin_users(request: Request, username: str = Form(...), display_name: str = Form(...),
+def admin_users(request: Request, username: str = Form(...),
                 password: str = Form(""), is_admin: str = Form(""), user=Depends(require_admin)):
+    name = username.strip().lower()
+    if not re.fullmatch(r"[a-z0-9._-]{2,32}", name):
+        return RedirectResponse("/admin", status_code=303)
     with db() as conn:
         conn.execute(
             "INSERT INTO users (username, display_name, password_hash, is_admin, created_at)"
             " VALUES (?, ?, ?, ?, ?) ON CONFLICT(username) DO UPDATE SET"
-            " display_name = excluded.display_name, is_admin = excluded.is_admin",
-            (username.strip().lower(), display_name.strip(), hash_password(password),
-             1 if is_admin == "1" else 0, now()))
+            " display_name = excluded.username, is_admin = excluded.is_admin",
+            (name, name, hash_password(password), 1 if is_admin == "1" else 0, now()))
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -715,14 +717,11 @@ def account(request: Request, user=Depends(require_user), ok: str = "", err: str
 
 
 @app.post("/account")
-def account_save(request: Request, display_name: str = Form(""), username: str = Form(""),
+def account_save(request: Request, username: str = Form(""),
                  current: str = Form(""), password: str = Form(""),
                  confirm: str = Form(""), user=Depends(require_user)):
     username = (username or "").strip().lower()
-    display_name = (display_name or "").strip()
 
-    if not display_name:
-        return RedirectResponse("/account?err=Display+name+can%27t+be+empty", status_code=303)
     if not re.fullmatch(r"[a-z0-9._-]{2,32}", username):
         return RedirectResponse(
             "/account?err=Username+must+be+2-32+characters,+letters+numbers+dot+dash+underscore",
@@ -743,13 +742,15 @@ def account_save(request: Request, display_name: str = Form(""), username: str =
                              (username, user["id"])).fetchone()
         if clash:
             return RedirectResponse("/account?err=That+username+is+taken", status_code=303)
+        # display_name is kept in step with username so the column never goes
+        # stale, but there is only one name to edit.
         if password:
             conn.execute("UPDATE users SET display_name = ?, username = ?, password_hash = ?"
                          " WHERE id = ?",
-                         (display_name, username, hash_password(password), user["id"]))
+                         (username, username, hash_password(password), user["id"]))
         else:
             conn.execute("UPDATE users SET display_name = ?, username = ? WHERE id = ?",
-                         (display_name, username, user["id"]))
+                         (username, username, user["id"]))
     return RedirectResponse("/account?ok=Saved", status_code=303)
 
 

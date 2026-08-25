@@ -41,7 +41,7 @@
           <a href="/add" class="{{ 'here' if nav == 'add' }}">Add Games</a>
           <a href="/broken" class="{{ 'here' if nav == 'broken' }}">Broken{% if broken_count %}<span class="badge">{{ broken_count }}</span>{% endif %}</a>
           <a href="/needs-art" class="{{ 'here' if nav == 'needsart' }}">Needs Art{% if no_art_count %}<span class="badge">{{ no_art_count }}</span>{% endif %}</a>
-          {% if user.is_admin %}<a href="/admin" class="{{ 'here' if nav == 'admin' }}">Management</a>{% endif %}
+          {% if user.is_admin %}<a href="/admin" class="{{ 'here' if nav == 'admin' }}">Admin</a>{% endif %}
         </div>
       </details>
     </nav>
@@ -52,7 +52,7 @@
         <b>{{ slots.balance }}</b>/{{ slots.limit }} slots
       </span>
       <details class="menu right {{ 'on' if nav in ['look', 'account'] }}">
-        <summary>{{ user.display_name }}</summary>
+        <summary>{{ user.username }}</summary>
         <div class="menu-items">
           <a href="/account" class="{{ 'here' if nav == 'account' }}">Account</a>
           <a href="/look" class="{{ 'here' if nav == 'look' }}">Look</a>

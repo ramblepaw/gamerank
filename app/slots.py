@@ -110,7 +110,7 @@ def set_balance(conn, balance: int, user_id=None, reason: str = "admin adjustmen
 
 def recent_events(conn, limit: int = 25):
     return conn.execute(
-        "SELECT e.*, g.title, u.display_name FROM slot_events e"
+        "SELECT e.*, g.title, u.username AS display_name FROM slot_events e"
         " LEFT JOIN games g ON g.id = e.game_id"
         " LEFT JOIN users u ON u.id = e.user_id"
         " ORDER BY e.id DESC LIMIT ?",

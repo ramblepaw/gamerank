@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% set nav = 'admin' %}
-{% block title %}Management &middot; GameRank{% endblock %}
+{% block title %}Admin &middot; GameRank{% endblock %}
 {% block body %}
 
-<h1>Management</h1>
+<h1>Admin</h1>
 
 <div class="split">
   <div>
@@ -121,10 +121,9 @@
     <h2>Users</h2>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>Name</th><th>Username</th><th>Admin</th></tr></thead>
+        <thead><tr><th>Username</th><th>Admin</th></tr></thead>
         <tbody>{% for u in users %}
-          <tr><td>{{ u.display_name }}</td><td style="color:var(--dim)">{{ u.username }}</td>
-              <td>{{ 'yes' if u.is_admin else '' }}</td></tr>
+          <tr><td>{{ u.username }}</td><td>{{ 'yes' if u.is_admin else '' }}</td></tr>
         {% endfor %}</tbody>
       </table>
     </div>
@@ -132,8 +131,6 @@
       <div class="row">
         <div class="grow"><label class="lbl" for="username">Username</label>
           <input type="text" name="username" id="username" required></div>
-        <div class="grow"><label class="lbl" for="display_name">Display name</label>
-          <input type="text" name="display_name" id="display_name" required></div>
         <div class="grow"><label class="lbl" for="password">Password</label>
           <input type="password" name="password" id="password" autocomplete="new-password"></div>
       </div>

@@ -51,7 +51,7 @@ def custom_list(conn=None) -> list:
     """Custom themes with their tokens already parsed, for rendering swatches."""
     def _read(c):
         rows = [dict(r) for r in c.execute(
-            "SELECT ct.*, u.display_name AS author FROM custom_themes ct"
+            "SELECT ct.*, u.username AS author FROM custom_themes ct"
             " LEFT JOIN users u ON u.id = ct.created_by ORDER BY ct.name COLLATE NOCASE")]
         for row in rows:
             try:
