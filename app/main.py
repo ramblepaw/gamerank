@@ -1,6 +1,8 @@
 """GameRank - verification, grading and slot tracking for a game library."""
+import json
 import os
 import re
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse, PlainTextResponse
@@ -296,6 +298,21 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
             keep: str = "", section: str = "", status: str = "active",
             sort: str = "title", view: str = "grid", page: int = 1,
             partial: int = 0, user=Depends(require_user)):
+    current = {"q": q, "verified": verified, "grade": grade, "keep": keep,
+               "section": section, "status": status, "sort": sort, "view": view}
+
+    # A bare visit - from the nav or a breadcrumb - resumes the last filters.
+    # It has to redirect rather than just apply them, because the scroller
+    # builds its requests from the address bar.
+    if not partial and not request.query_params:
+        try:
+            saved = json.loads(user.get("library_filters") or "{}")
+        except (ValueError, TypeError):
+            saved = {}
+        saved = {k: v for k, v in saved.items() if k in current and v}
+        if saved and saved != {"status": "active", "sort": "title", "view": "grid"}:
+            return RedirectResponse("/library?" + urlencode(saved), status_code=303)
+
     where, params = [], []
     if q.strip():
         where.append("g.title_norm LIKE ?")
@@ -348,6 +365,12 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
         return templates.TemplateResponse(
             "_library_items.html",
             {"request": request, "games": rows, "view": view})
+
+    # Remember what was being looked at, so coming back from a game page or the
+    # nav resumes it rather than resetting to everything.
+    with db() as conn:
+        conn.execute("UPDATE users SET library_filters = ? WHERE id = ?",
+                     (json.dumps(current), user["id"]))
 
     return render(request, "library.html", user=user, games=rows, total=total, page=page,
                   pages=max(1, (total + per - 1) // per), sections=sections, grades=GRADES,

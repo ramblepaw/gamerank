@@ -43,9 +43,14 @@
 </form>
 
 {% set qs = 'q=' ~ f.q ~ '&verified=' ~ f.verified ~ '&grade=' ~ f.grade ~ '&keep=' ~ f.keep ~ '&section=' ~ f.section ~ '&status=' ~ f.status ~ '&sort=' ~ f.sort %}
+{% set active = f.q or f.verified or f.grade or f.keep or f.section or f.sort != 'title' or f.status != 'active' %}
 <p class="sub">
   <a href="/library?{{ qs }}&view={{ 'list' if view == 'grid' else 'grid' }}">{{ 'list view' if view == 'grid' else 'grid view' }}</a>
   &middot; <a href="/export.txt?scope=all&fmt=markdown&n=3000" target="_blank">text list</a>
+  {% if active %}
+  &middot; <a href="/library?status=active&sort=title&view={{ view }}">clear filters</a>
+  <span class="tag warn" style="margin-left:4px">filtered</span>
+  {% endif %}
 </p>
 
 {% if not games %}

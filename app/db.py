@@ -208,6 +208,8 @@ MIGRATIONS = [
     ("users", "motion", "TEXT"),
     # Slated = still on the server, queued for the next batch deletion.
     ("games", "slated_at", "TEXT"),
+    # Last masterlist filter set, so returning to it resumes where you were.
+    ("users", "library_filters", "TEXT"),
 ]
 
 
