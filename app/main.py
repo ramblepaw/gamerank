@@ -8,14 +8,26 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import URLSafeSerializer, BadSignature
 
-from . import slots, queues, exporter, importer, metadata, paste, jobs
+from . import slots, queues, exporter, importer, metadata, paste, jobs, themes
 from .db import (
     db, init_db, now, today, norm_title, log_audit, get_setting_conn, set_setting,
     hash_password, verify_password, GRADES, BROKEN_STATUSES, EXPORT_DIR, FALLBACK_DATE,
-    THEMES, ACCENTS, DENSITIES, TILE_SIZES,
+    THEMES, ACCENTS, DENSITIES, TILE_SIZES, THEME_TOKENS, DEFAULT_THEME,
 )
 
 BASE = os.path.dirname(__file__)
+
+
+# Stamped onto the stylesheet URL so a browser picks up a new build instead of
+# serving the cached one after an update.
+def _asset_version() -> str:
+    try:
+        return str(int(os.path.getmtime(os.path.join(BASE, "static", "style.css"))))
+    except OSError:
+        return "0"
+
+
+ASSET_V = _asset_version()
 signer = URLSafeSerializer(os.environ.get("GRT_SECRET", "dev-secret-change-me"), salt="session")
 
 app = FastAPI(title="GameRank")
@@ -80,8 +92,10 @@ def prefs(user) -> dict:
     """Look and feel, per account. Falls back to the defaults for logged-out pages."""
     user = user or {}
     tile = TILE_SIZES.get(user.get("tile_size") or "medium", TILE_SIZES["medium"])
+    theme = user.get("theme") or DEFAULT_THEME
     return {
-        "theme": user.get("theme") or "archive",
+        "theme": theme,
+        "theme_tokens": themes.tokens_for(theme),
         "accent": user.get("accent") or "",
         "density": user.get("density") or "comfortable",
         "tile_size": user.get("tile_size") or "medium",
@@ -93,6 +107,7 @@ def prefs(user) -> dict:
 def render(request: Request, template: str, **ctx):
     user = ctx.pop("user", None) or current_user(request)
     ctx["ui"] = prefs(user)
+    ctx["asset_v"] = ASSET_V
     with db() as conn:
         ctx["slots"] = slots.status(conn)
         ctx["broken_count"] = conn.execute(
@@ -111,7 +126,8 @@ def login_form(request: Request):
         users = [dict(r) for r in conn.execute(
             "SELECT id, username, display_name FROM users ORDER BY display_name")]
     return templates.TemplateResponse(
-        "login.html", {"request": request, "users": users, "user": None, "error": None})
+        "login.html", {"request": request, "users": users, "user": None,
+                       "error": None, "asset_v": ASSET_V})
 
 
 @app.post("/login")
@@ -123,7 +139,8 @@ def login(request: Request, username: str = Form(...), password: str = Form(""))
     if not row or not verify_password(password, row["password_hash"] or ""):
         return templates.TemplateResponse(
             "login.html",
-            {"request": request, "users": users, "user": None, "error": "Wrong password."},
+            {"request": request, "users": users, "user": None,
+             "error": "Wrong password.", "asset_v": ASSET_V},
             status_code=401)
     resp = RedirectResponse("/", status_code=303)
     resp.set_cookie("grt_session", signer.dumps({"uid": row["id"]}),
@@ -694,25 +711,73 @@ def admin_users(request: Request, username: str = Form(...), display_name: str =
 @app.get("/look", response_class=HTMLResponse)
 def look(request: Request, user=Depends(require_user)):
     return render(request, "look.html", user=user, themes=THEMES, accents=ACCENTS,
-                  densities=DENSITIES, tile_sizes=list(TILE_SIZES))
+                  densities=DENSITIES, tile_sizes=list(TILE_SIZES),
+                  customs=themes.custom_list())
 
 
 @app.post("/look")
 def look_save(request: Request, theme: str = Form(""), accent: str = Form(""),
               density: str = Form(""), tile_size: str = Form(""),
               motion: str = Form(""), user=Depends(require_user)):
-    names = [t[0] for t in THEMES]
+    valid = {t[0] for t in THEMES} | {c["slug"] for c in themes.custom_list()}
     accent = (accent or "").lstrip("#").lower()
     with db() as conn:
         conn.execute(
             "UPDATE users SET theme = ?, accent = ?, density = ?, tile_size = ?, motion = ?"
             " WHERE id = ?",
-            (theme if theme in names else "archive",
+            (theme if theme in valid else DEFAULT_THEME,
              accent if re.fullmatch(r"[0-9a-f]{6}", accent or "") else "",
              density if density in DENSITIES else "comfortable",
              tile_size if tile_size in TILE_SIZES else "medium",
              "off" if motion == "off" else "on",
              user["id"]))
+    return RedirectResponse("/look", status_code=303)
+
+
+@app.get("/look/theme", response_class=HTMLResponse)
+def theme_editor(request: Request, slug: str = "", base: str = "", user=Depends(require_user)):
+    """Build a theme by starting from an existing one and adjusting colours."""
+    editing = themes.get_custom(slug) if slug else {}
+    if editing:
+        values = themes.tokens_for(slug)
+        start = editing.get("based_on") or DEFAULT_THEME
+        name = editing["name"]
+    else:
+        start = base if base in {t[0] for t in THEMES} else DEFAULT_THEME
+        values = {}
+        name = ""
+    palette = themes.builtin_palette(start)
+    fields = [{"key": key, "label": label,
+               "value": values.get(key) or _hex_of(palette.get(key), key)}
+              for key, label in THEME_TOKENS]
+    return render(request, "theme_edit.html", user=user, editing=editing, name=name,
+                  base=start, fields=fields, themes=THEMES)
+
+
+def _hex_of(value: str, key: str) -> str:
+    """Colour inputs only accept #rrggbb, so anything else needs a stand-in."""
+    value = (value or "").strip()
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+        return value
+    if re.fullmatch(r"#[0-9a-fA-F]{3}", value):
+        return "#" + "".join(c * 2 for c in value[1:])
+    return "#888888"
+
+
+@app.post("/look/theme")
+async def theme_save(request: Request, name: str = Form(""), base: str = Form(""),
+                     slug: str = Form(""), user=Depends(require_user)):
+    form = await request.form()
+    tokens = {key: str(form.get("t_" + key, "")) for key, _ in THEME_TOKENS}
+    saved = themes.save_custom(name, base, tokens, user["id"], slug=slug)
+    with db() as conn:
+        conn.execute("UPDATE users SET theme = ? WHERE id = ?", (saved, user["id"]))
+    return RedirectResponse("/look", status_code=303)
+
+
+@app.post("/look/theme/{slug}/delete")
+def theme_delete(request: Request, slug: str, user=Depends(require_user)):
+    themes.delete_custom(slug)
     return RedirectResponse("/look", status_code=303)
 
 

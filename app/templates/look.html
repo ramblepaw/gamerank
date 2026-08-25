@@ -4,7 +4,8 @@
 {% block body %}
 
 <h1>Look</h1>
-<p class="sub">Yours only. {{ user.display_name }}'s settings don't touch anyone else's.</p>
+<p class="sub">Yours only &mdash; {{ user.display_name }}'s settings don't touch anyone else's.
+  Custom themes are shared, so either of you can use one once it's made.</p>
 
 <form method="post" action="/look">
   <h2>Theme</h2>
@@ -26,7 +27,34 @@
       </span>
     </label>
     {% endfor %}
+
+    {% for c in customs %}
+    {% set tk = c.token_map %}
+    <label class="themepick" style="position:relative;display:block">
+      <input type="radio" name="theme" value="{{ c.slug }}" {{ 'checked' if ui.theme == c.slug }}>
+      <span class="themecard" style="background:{{ tk.get('panel','var(--panel)') }};color:{{ tk.get('text','var(--text)') }};display:block">
+        <span class="themerow">
+          <i style="background:{{ tk.get('bg','#222') }}"></i>
+          <i style="background:{{ tk.get('panel-2','#333') }}"></i>
+          <i style="background:{{ tk.get('accent','#888') }}"></i>
+          <i style="background:{{ tk.get('gS','#888') }}"></i>
+          <i style="background:{{ tk.get('gD','#888') }}"></i>
+        </span>
+        <span class="tname"><b>{{ c.name }}</b><br>
+          <span style="opacity:.7;font-size:12px">
+            custom{% if c.author %} &middot; {{ c.author }}{% endif %}
+          </span></span>
+      </span>
+    </label>
+    {% endfor %}
   </div>
+
+  <p class="sub" style="margin-top:12px">
+    <a class="btn" href="/look/theme">Make a theme</a>
+    {% for c in customs %}
+      <a class="btn sm" href="/look/theme?slug={{ c.slug }}">Edit {{ c.name }}</a>
+    {% endfor %}
+  </p>
 
   <h2>Accent</h2>
   <div class="swatches">
@@ -68,8 +96,8 @@
     <label for="m-off">off</label>
   </div>
   <p class="sub" style="margin-top:8px;font-size:12px">
-    Off kills every transition and hover animation. Your OS reduced-motion setting already
-    does this on its own.
+    Off kills every transition and hover animation. Your OS reduced-motion setting
+    already does this on its own.
   </p>
 
   <div class="row" style="margin-top:22px">

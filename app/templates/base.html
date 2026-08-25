@@ -1,36 +1,63 @@
 <!doctype html>
 <html lang="en" data-theme="{{ ui.theme }}" data-density="{{ ui.density }}" data-motion="{{ ui.motion }}"
-      style="{% if ui.accent %}--accent-user:#{{ ui.accent }};{% endif %}--tile:{{ ui.tile_px }}px">
+      style="{% for k, v in ui.theme_tokens.items() %}--{{ k }}:{{ v }};{% endfor %}{% if ui.accent %}--accent-user:#{{ ui.accent }};{% endif %}--tile:{{ ui.tile_px }}px">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}GameRank{% endblock %}</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
 </head>
 <body>
 {% if user %}
+{% set tools    = nav in ['verify', 'grade'] %}
+{% set masters  = nav in ['library', 'recent', 'removal', 'wishlist'] %}
+{% set manage   = nav in ['broken', 'add', 'needsart', 'admin'] %}
+{% set mgmt_badge = broken_count + no_art_count %}
 <header class="top grain">
   <div class="top-inner">
-    <div class="brand">GameRank</div>
+    <a class="brand" href="/">GameRank</a>
     <nav>
-      <a href="/" class="{{ 'on' if nav == 'dash' }}">Overview</a>
-      <a href="/verify" class="{{ 'on' if nav == 'verify' }}">Verify</a>
-      <a href="/grade" class="{{ 'on' if nav == 'grade' }}">Grade</a>
-      <a href="/broken" class="{{ 'on' if nav == 'broken' }}">Broken{% if broken_count %}<span class="badge">{{ broken_count }}</span>{% endif %}</a>
-      <a href="/removal" class="{{ 'on' if nav == 'removal' }}">Removal</a>
-      <a href="/library" class="{{ 'on' if nav == 'library' }}">Library</a>
-      <a href="/recent" class="{{ 'on' if nav == 'recent' }}">Recent</a>
-      <a href="/needs-art" class="{{ 'on' if nav == 'needsart' }}">Needs art{% if no_art_count %}<span class="badge">{{ no_art_count }}</span>{% endif %}</a>
-      <a href="/add" class="{{ 'on' if nav == 'add' }}">Add</a>
-      <a href="/wishlist" class="{{ 'on' if nav == 'wishlist' }}">Wishlist</a>
-      <a href="/look" class="{{ 'on' if nav == 'look' }}">Look</a>
-      {% if user.is_admin %}<a href="/admin" class="{{ 'on' if nav == 'admin' }}">Admin</a>{% endif %}
+      <details class="menu {{ 'on' if tools }}">
+        <summary>Tools</summary>
+        <div class="menu-items">
+          <a href="/verify" class="{{ 'here' if nav == 'verify' }}">Verify</a>
+          <a href="/grade" class="{{ 'here' if nav == 'grade' }}">Grade</a>
+        </div>
+      </details>
+
+      <details class="menu {{ 'on' if masters }}">
+        <summary>Masterlist</summary>
+        <div class="menu-items">
+          <a href="/library" class="{{ 'here' if nav == 'library' }}">Masterlist</a>
+          <a href="/recent" class="{{ 'here' if nav == 'recent' }}">Recent</a>
+          <a href="/removal" class="{{ 'here' if nav == 'removal' }}">Removal</a>
+          <a href="/wishlist" class="{{ 'here' if nav == 'wishlist' }}">Wishlist</a>
+        </div>
+      </details>
+
+      <details class="menu {{ 'on' if manage }}">
+        <summary>Management{% if mgmt_badge %}<span class="badge">{{ mgmt_badge }}</span>{% endif %}</summary>
+        <div class="menu-items">
+          <a href="/add" class="{{ 'here' if nav == 'add' }}">Add Games</a>
+          <a href="/broken" class="{{ 'here' if nav == 'broken' }}">Broken{% if broken_count %}<span class="badge">{{ broken_count }}</span>{% endif %}</a>
+          <a href="/needs-art" class="{{ 'here' if nav == 'needsart' }}">Needs Art{% if no_art_count %}<span class="badge">{{ no_art_count }}</span>{% endif %}</a>
+          {% if user.is_admin %}<a href="/admin" class="{{ 'here' if nav == 'admin' }}">Management</a>{% endif %}
+        </div>
+      </details>
     </nav>
+
     <div class="who">
-      <span class="slotpill {{ 'out' if slots.balance <= 0 else ('low' if slots.balance <= 10 else '') }}">
+      <span class="slotpill {{ 'out' if slots.balance <= 0 else ('low' if slots.balance <= 10 else '') }}"
+            title="Slots left for new games">
         <b>{{ slots.balance }}</b>/{{ slots.limit }} slots
       </span>
-      <a href="/logout">{{ user.display_name }}</a>
+      <details class="menu right {{ 'on' if nav == 'look' }}">
+        <summary>{{ user.display_name }}</summary>
+        <div class="menu-items">
+          <a href="/look" class="{{ 'here' if nav == 'look' }}">Look</a>
+          <a href="/logout">Sign out</a>
+        </div>
+      </details>
     </div>
   </div>
 </header>
@@ -39,7 +66,7 @@
 {% block body %}{% endblock %}
 </main>
 <script>
-// Not every game has portrait boxart - some only have a 460x215 header.
+// Not every game has portrait boxart - some only have a wide header image.
 // Cropping those to 2:3 destroys them, so wide art gets letterboxed instead.
 (function () {
   function fit(img) {
@@ -47,6 +74,21 @@
   }
   document.querySelectorAll('.art img').forEach(function (img) {
     if (img.complete) fit(img); else img.addEventListener('load', function () { fit(img); });
+  });
+
+  // One menu open at a time, and clicking away or pressing Escape closes it.
+  var menus = [].slice.call(document.querySelectorAll('details.menu'));
+  menus.forEach(function (m) {
+    m.addEventListener('toggle', function () {
+      if (!m.open) return;
+      menus.forEach(function (other) { if (other !== m) other.open = false; });
+    });
+  });
+  document.addEventListener('click', function (e) {
+    menus.forEach(function (m) { if (!m.contains(e.target)) m.open = false; });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') menus.forEach(function (m) { m.open = false; });
   });
 })();
 </script>

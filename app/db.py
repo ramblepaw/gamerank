@@ -126,6 +126,17 @@ CREATE TABLE IF NOT EXISTS wishlist (
     updated_at  TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS custom_themes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug       TEXT NOT NULL UNIQUE,
+    name       TEXT NOT NULL,
+    based_on   TEXT,
+    tokens     TEXT NOT NULL,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     game_id    INTEGER REFERENCES games(id) ON DELETE CASCADE,
@@ -146,12 +157,37 @@ DEFAULT_SETTINGS = {
 }
 
 # Columns added after the first release. Applied to existing databases on boot.
+DEFAULT_THEME = "dusk"
+
 THEMES = [
+    ("dusk",    "Dusk",    "aubergine and rose"),
     ("archive", "Archive", "walnut and amber"),
     ("ember",   "Ember",   "charcoal and hot orange"),
     ("moss",    "Moss",    "deep green and brass"),
-    ("dusk",    "Dusk",    "aubergine and rose"),
     ("paper",   "Paper",   "light, warm, ink on card"),
+]
+
+# Tokens a custom theme may set. Everything else is derived in CSS.
+THEME_TOKENS = [
+    ("bg",        "Page background"),
+    ("bg-2",      "Background, upper"),
+    ("panel",     "Panel"),
+    ("panel-2",   "Panel, raised"),
+    ("sunk",      "Inputs and wells"),
+    ("line",      "Hairline"),
+    ("line-2",    "Border"),
+    ("text",      "Text"),
+    ("dim",       "Muted text"),
+    ("accent",    "Accent"),
+    ("accent-2",  "Accent, bright"),
+    ("on-accent", "Text on accent"),
+    ("ok",        "Good"),
+    ("bad",       "Bad"),
+    ("gS",        "Grade S"),
+    ("gA",        "Grade A"),
+    ("gB",        "Grade B"),
+    ("gC",        "Grade C"),
+    ("gD",        "Grade D"),
 ]
 ACCENTS = ["c9852f", "e2703a", "c94f4f", "b55ea8", "5f9e6e", "3f8fa8", "d4a017", "9a8c7c"]
 DENSITIES = ["comfortable", "compact"]

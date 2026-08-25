@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set nav = 'look' %}
+{% block title %}{{ 'Edit theme' if editing else 'New theme' }} &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>{{ 'Edit ' ~ editing.name if editing else 'Make a theme' }}</h1>
+<p class="sub">
+  Starts from an existing palette so you only change what you want.
+  Saving switches you to it. Custom themes are shared with everyone.
+</p>
+
+<form method="post" action="/look/theme" id="themeform">
+  <input type="hidden" name="slug" value="{{ editing.slug if editing else '' }}">
+
+  <div class="row">
+    <div class="grow" style="flex:2">
+      <label class="lbl" for="name">Name</label>
+      <input type="text" name="name" id="name" required value="{{ name }}" placeholder="e.g. Midnight">
+    </div>
+    <div class="grow">
+      <label class="lbl" for="base">Start from</label>
+      <select name="base" id="base" onchange="location.href='/look/theme?base='+this.value+'{% if editing %}&slug={{ editing.slug }}{% endif %}'">
+        {% for id, tname, _ in themes %}
+        <option value="{{ id }}" {{ 'selected' if base == id }}>{{ tname }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <h2>Colours</h2>
+  <div class="tokengrid">
+    {% for f in fields %}
+    <label class="token">
+      <input type="color" name="t_{{ f.key }}" value="{{ f.value }}"
+             oninput="preview('{{ f.key }}', this.value)">
+      <span>{{ f.label }}<br><code>--{{ f.key }}</code></span>
+    </label>
+    {% endfor %}
+  </div>
+
+  <div class="row" style="margin-top:20px">
+    <button class="primary" type="submit">{{ 'Save changes' if editing else 'Create and use' }}</button>
+    <a class="btn" href="/look">Cancel</a>
+    {% if editing %}
+    <button class="bad" type="submit" formaction="/look/theme/{{ editing.slug }}/delete"
+            formnovalidate>Delete theme</button>
+    {% endif %}
+  </div>
+</form>
+
+<h2>Preview</h2>
+<p class="sub" style="font-size:12px">Changes apply to this whole page as you pick, so you're
+  seeing the real thing rather than a swatch.</p>
+<div class="card grain">
+  <div class="row">
+    <button class="primary" type="button">Primary</button>
+    <button type="button">Secondary</button>
+    <button class="bad" type="button">Destructive</button>
+    <span class="tag ok">checked</span>
+    <span class="tag no">broken</span>
+    <span class="tag warn">grade</span>
+  </div>
+  <div class="row" style="margin-top:12px">
+    {% for g in ['S','A','B','C','D'] %}
+    <span class="grade-letter g-{{ g }}" style="font-size:22px">{{ g }}</span>
+    {% endfor %}
+  </div>
+  <div class="bar" style="margin-top:14px"><i style="width:62%"></i></div>
+</div>
+
+<script>
+function preview(key, value) { document.documentElement.style.setProperty('--' + key, value); }
+</script>
+{% endblock %}
