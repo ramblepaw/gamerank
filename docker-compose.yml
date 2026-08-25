@@ -2,6 +2,9 @@ services:
   gamerank:
     container_name: gamerank
     image: ghcr.io/OWNER/gamerank:latest
+    # Always check the registry, so a redeploy picks up a new :latest instead
+    # of reusing the copy already on the host.
+    pull_policy: always
     ports:
       # host:container - change the left number if the port is taken.
       - '8090:8080'
