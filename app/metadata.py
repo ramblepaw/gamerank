@@ -420,6 +420,20 @@ def suggest(title: str, limit: int = 12) -> list:
     return found[:limit]
 
 
+def _pc_release_rank(entry: dict) -> tuple:
+    """Sort key for entries sharing a title. Lower is better.
+
+    Art first, since an entry without it is useless here. Then a store link,
+    which is what separates the PC release from a console port. Then the
+    earliest date, which is the original rather than a later re-release.
+    """
+    return (
+        0 if entry.get("cover_url") else 1,
+        0 if entry.get("steam_appid") or entry.get("store_url") else 1,
+        entry.get("release_date") or "9999",
+    )
+
+
 def lookup(title: str, appid=None) -> dict:
     """Best single match, or nothing.
 
@@ -443,9 +457,10 @@ def lookup(title: str, appid=None) -> dict:
         # this is precisely when the typo pass is worth running.
         return _typo_pass(title, wanted)
 
-    # Several IGDB entries can share a name outright - "Saints Row" is both the
-    # 2006 original and the 2022 reboot. Picking one at random is how the wrong
-    # art gets attached, so an ambiguous title goes to a person to choose from.
+    # Duplicate names are the norm on IGDB, not the exception: console ports,
+    # remasters and regional releases all carry the game's plain title. The
+    # extras almost never have a store link, so preferring the entry that does
+    # picks the PC release - which is the only kind this library holds.
     exact, seen_ids = [], set()
     for r in results:
         name = r.get("title") or ""
@@ -453,9 +468,8 @@ def lookup(title: str, appid=None) -> dict:
             if r.get("igdb_id") not in seen_ids:
                 seen_ids.add(r.get("igdb_id"))
                 exact.append(r)
-    if len(exact) > 1:
-        return {"ambiguous": [r for r in exact if r.get("cover_url")][:6]}
     if exact:
+        exact.sort(key=_pc_release_rank)
         return dict(exact[0], match_kind="exact")
 
     # IGDB often carries the subtitled name: "Shapez 2: Factory" for what the
