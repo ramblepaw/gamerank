@@ -708,6 +708,62 @@ def admin_users(request: Request, username: str = Form(...), display_name: str =
 
 # ------------------------------------------------------------------ personalise
 
+@app.get("/account", response_class=HTMLResponse)
+def account(request: Request, user=Depends(require_user), ok: str = "", err: str = ""):
+    return render(request, "account.html", user=user, ok=ok, err=err,
+                  has_password=bool(user.get("password_hash")))
+
+
+@app.post("/account")
+def account_save(request: Request, display_name: str = Form(""), username: str = Form(""),
+                 current: str = Form(""), password: str = Form(""),
+                 confirm: str = Form(""), user=Depends(require_user)):
+    username = (username or "").strip().lower()
+    display_name = (display_name or "").strip()
+
+    if not display_name:
+        return RedirectResponse("/account?err=Display+name+can%27t+be+empty", status_code=303)
+    if not re.fullmatch(r"[a-z0-9._-]{2,32}", username):
+        return RedirectResponse(
+            "/account?err=Username+must+be+2-32+characters,+letters+numbers+dot+dash+underscore",
+            status_code=303)
+
+    # Changing a password needs the current one, so a left-open session can't
+    # be used to lock the owner out.
+    if password:
+        if password != confirm:
+            return RedirectResponse("/account?err=The+two+passwords+don%27t+match", status_code=303)
+        if len(password) < 4:
+            return RedirectResponse("/account?err=Password+is+too+short", status_code=303)
+        if user.get("password_hash") and not verify_password(current, user["password_hash"]):
+            return RedirectResponse("/account?err=Current+password+is+wrong", status_code=303)
+
+    with db() as conn:
+        clash = conn.execute("SELECT id FROM users WHERE username = ? AND id != ?",
+                             (username, user["id"])).fetchone()
+        if clash:
+            return RedirectResponse("/account?err=That+username+is+taken", status_code=303)
+        if password:
+            conn.execute("UPDATE users SET display_name = ?, username = ?, password_hash = ?"
+                         " WHERE id = ?",
+                         (display_name, username, hash_password(password), user["id"]))
+        else:
+            conn.execute("UPDATE users SET display_name = ?, username = ? WHERE id = ?",
+                         (display_name, username, user["id"]))
+    return RedirectResponse("/account?ok=Saved", status_code=303)
+
+
+@app.post("/account/password/clear")
+def account_password_clear(request: Request, current: str = Form(""),
+                           user=Depends(require_user)):
+    """Drop the password back to none, for a LAN-only setup that doesn't want one."""
+    if user.get("password_hash") and not verify_password(current, user["password_hash"]):
+        return RedirectResponse("/account?err=Current+password+is+wrong", status_code=303)
+    with db() as conn:
+        conn.execute("UPDATE users SET password_hash = '' WHERE id = ?", (user["id"],))
+    return RedirectResponse("/account?ok=Password+removed", status_code=303)
+
+
 @app.get("/look", response_class=HTMLResponse)
 def look(request: Request, user=Depends(require_user)):
     return render(request, "look.html", user=user, themes=THEMES, accents=ACCENTS,
@@ -785,14 +841,6 @@ def theme_delete(request: Request, slug: str, user=Depends(require_user)):
 def admin_igdb_test(request: Request, user=Depends(require_admin)):
     return render(request, "covers_result.html", user=user, tried=0, found=0,
                   igdb_test=metadata.test_connection())
-
-
-@app.post("/admin/password")
-def admin_password(request: Request, password: str = Form(...), user=Depends(require_user)):
-    with db() as conn:
-        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?",
-                     (hash_password(password), user["id"]))
-    return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/admin/import")

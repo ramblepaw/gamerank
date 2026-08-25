@@ -26,7 +26,7 @@
       </details>
 
       <details class="menu {{ 'on' if masters }}">
-        <summary>Masterlist</summary>
+        <summary>Library</summary>
         <div class="menu-items">
           <a href="/library" class="{{ 'here' if nav == 'library' }}">Masterlist</a>
           <a href="/recent" class="{{ 'here' if nav == 'recent' }}">Recent</a>
@@ -51,9 +51,10 @@
             title="Slots left for new games">
         <b>{{ slots.balance }}</b>/{{ slots.limit }} slots
       </span>
-      <details class="menu right {{ 'on' if nav == 'look' }}">
+      <details class="menu right {{ 'on' if nav in ['look', 'account'] }}">
         <summary>{{ user.display_name }}</summary>
         <div class="menu-items">
+          <a href="/account" class="{{ 'here' if nav == 'account' }}">Account</a>
           <a href="/look" class="{{ 'here' if nav == 'look' }}">Look</a>
           <a href="/logout">Sign out</a>
         </div>

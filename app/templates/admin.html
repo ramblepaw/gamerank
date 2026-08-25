@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% set nav = 'admin' %}
-{% block title %}Admin &middot; GameRank{% endblock %}
+{% block title %}Management &middot; GameRank{% endblock %}
 {% block body %}
 
-<h1>Admin</h1>
+<h1>Management</h1>
 
 <div class="split">
   <div>
@@ -142,16 +142,12 @@
           <input type="checkbox" name="is_admin" value="1" style="width:auto"> Admin</label>
         <button class="primary" type="submit">Add or update</button>
       </div>
+      <p class="sub" style="font-size:12px;margin:10px 0 0">
+        An existing username gets updated; a blank password leaves whatever is already set.
+        Your own name and password are on the <a href="/account">Account</a> page.
+      </p>
     </form>
 
-    <h2>Your password</h2>
-    <form class="card grain" method="post" action="/admin/password">
-      <div class="row">
-        <div class="grow"><label class="lbl" for="newpw">New password</label>
-          <input type="password" name="password" id="newpw" autocomplete="new-password" required></div>
-        <div style="align-self:flex-end"><button type="submit">Set</button></div>
-      </div>
-    </form>
   </div>
 
   <div>

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% set nav = 'account' %}
+{% block title %}Account &middot; GameRank{% endblock %}
+{% block body %}
+
+<h1>Account</h1>
+<p class="sub">
+  Your sign-in details.
+  {% if user.is_admin %}Other people's accounts are under Management.{% endif %}
+</p>
+
+{% if ok %}<div class="flash">{{ ok }}</div>{% endif %}
+{% if err %}<div class="flash warn">{{ err }}</div>{% endif %}
+
+<div class="split">
+  <div>
+    <form class="card grain" method="post" action="/account">
+      <div class="row">
+        <div class="grow">
+          <label class="lbl" for="display_name">Display name</label>
+          <input type="text" name="display_name" id="display_name"
+                 value="{{ user.display_name }}" required>
+        </div>
+        <div class="grow">
+          <label class="lbl" for="username">Username</label>
+          <input type="text" name="username" id="username" value="{{ user.username }}" required>
+        </div>
+      </div>
+      <p class="sub" style="font-size:12px;margin:8px 0 0">
+        The display name is what shows on grades and in the corner. The username is what
+        you pick on the sign-in screen.
+      </p>
+
+      <h2>Change password</h2>
+      {% if has_password %}
+      <div>
+        <label class="lbl" for="current">Current password</label>
+        <input type="password" name="current" id="current" autocomplete="current-password">
+      </div>
+      {% else %}
+      <p class="sub" style="margin:0 0 10px">
+        <span class="tag warn">no password set</span>
+        Anyone who can reach this server can sign in as you.
+      </p>
+      {% endif %}
+
+      <div class="row" style="margin-top:12px">
+        <div class="grow">
+          <label class="lbl" for="password">New password</label>
+          <input type="password" name="password" id="password" autocomplete="new-password">
+        </div>
+        <div class="grow">
+          <label class="lbl" for="confirm">Repeat it</label>
+          <input type="password" name="confirm" id="confirm" autocomplete="new-password">
+        </div>
+      </div>
+      <p class="sub" style="font-size:12px;margin:8px 0 0">
+        Leave both blank to keep {{ 'your current password' if has_password else 'no password' }}.
+      </p>
+
+      <div class="row" style="margin-top:16px">
+        <button class="primary" type="submit">Save</button>
+        <a class="btn" href="/">Back</a>
+      </div>
+    </form>
+
+    {% if has_password %}
+    <h2>Remove password</h2>
+    <form class="card grain" method="post" action="/account/password/clear">
+      <p class="sub" style="margin:0 0 10px">
+        Signs you in with just a name picker. Only sensible on a network you trust.
+      </p>
+      <div class="row">
+        <div class="grow">
+          <label class="lbl" for="clearpw">Current password</label>
+          <input type="password" name="current" id="clearpw" autocomplete="current-password" required>
+        </div>
+        <div style="align-self:flex-end"><button class="bad" type="submit">Remove password</button></div>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+
+  <div>
+    <h2>This account</h2>
+    <div class="card grain log">
+      <ul class="plain">
+        <li>Signed in as <b>{{ user.display_name }}</b></li>
+        <li>Username: {{ user.username }}</li>
+        <li>Role: {{ 'Administrator' if user.is_admin else 'Standard' }}</li>
+        <li>Password: {{ 'set' if has_password else 'none' }}</li>
+      </ul>
+    </div>
+    <p class="sub" style="margin-top:12px;font-size:12px">
+      Changing your username doesn't sign you out &mdash; the session follows the account,
+      not the name.
+    </p>
+  </div>
+</div>
+{% endblock %}
