@@ -2,7 +2,7 @@
 import json
 import os
 import re
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse, PlainTextResponse
@@ -473,33 +473,53 @@ def game_fetch(request: Request, game_id: int, user=Depends(require_user)):
 
 
 @app.get("/game/{game_id}/match", response_class=HTMLResponse)
-def game_match(request: Request, game_id: int, q: str = "", user=Depends(require_user)):
+def game_match(request: Request, game_id: int, q: str = "", back: str = "",
+               user=Depends(require_user)):
     with db() as conn:
         row = conn.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
         if not row:
             raise HTTPException(404, "No such game.")
     term = q.strip() or row["title"]
-    return render(request, "match.html", user=user, g=dict(row), term=term,
+    # Remember where the user arrived from so picking a match returns them
+    # there - coming from the worklist and landing on a game page means
+    # navigating back for every single one.
+    back = back or _referer_path(request)
+    return render(request, "match.html", user=user, g=dict(row), term=term, back=back,
                   results=metadata.suggest(term, 12), igdb=metadata.igdb_available())
 
 
 @app.post("/game/{game_id}/match")
 def game_match_pick(request: Request, game_id: int, igdb_id: int = Form(...),
                     term: str = Form(""), retitle: str = Form(""),
-                    user=Depends(require_user)):
+                    back: str = Form(""), user=Depends(require_user)):
     chosen = next((r for r in metadata.suggest(term, 12) if r.get("igdb_id") == igdb_id), None)
     if not chosen:
         raise HTTPException(400, "That result is no longer in the list.")
     with db() as conn:
         metadata.apply(conn, game_id, chosen, overwrite_title=(retitle == "1"))
         log_audit(conn, game_id, user["id"], "metadata", "picked by hand")
-    return RedirectResponse("/game/%d" % game_id, status_code=303)
+    return RedirectResponse(back or "/game/%d" % game_id, status_code=303)
+
+
+def _referer_path(request: Request) -> str:
+    """The path part of where the request came from, or blank."""
+    ref = request.headers.get("referer") or ""
+    try:
+        parsed = urlparse(ref)
+    except ValueError:
+        return ""
+    # Only follow a referer from this app. Keeping just the path would be safe
+    # enough, but a path borrowed from another site is meaningless here.
+    if parsed.netloc and parsed.netloc != request.url.netloc:
+        return ""
+    if parsed.path.startswith("/"):
+        return parsed.path + (("?" + parsed.query) if parsed.query else "")
+    return ""
 
 
 def _back_to(request: Request, fallback: str) -> str:
     """Send the user back where they came from, not to a fixed page."""
-    ref = request.headers.get("referer") or ""
-    return ref if ref.startswith("http") else fallback
+    return _referer_path(request) or fallback
 
 
 @app.post("/game/{game_id}/slate")
@@ -628,23 +648,26 @@ def removal(request: Request, user=Depends(require_user)):
 # ----------------------------------------------------------------------- add/paste
 
 @app.get("/add", response_class=HTMLResponse)
-def add_form(request: Request, user=Depends(require_user)):
-    return render(request, "add.html", user=user, parsed=None, result=None)
+def add_form(request: Request, mode: str = "add", user=Depends(require_user)):
+    return render(request, "add.html", user=user, parsed=None, result=None,
+                  mode="update" if mode == "update" else "add")
 
 
 @app.post("/add/preview", response_class=HTMLResponse)
-def add_preview(request: Request, text: str = Form(...), user=Depends(require_user)):
+def add_preview(request: Request, text: str = Form(...), mode: str = Form("add"),
+                user=Depends(require_user)):
     items = paste.parse(text)
     with db() as conn:
         for i, item in enumerate(items):
             item["i"] = i
             item["match"] = paste.match(conn, item["title"])
-    return render(request, "add.html", user=user, parsed=items, result=None, raw=text)
+    return render(request, "add.html", user=user, parsed=items, result=None, raw=text,
+                  mode=mode)
 
 
 @app.post("/add/confirm")
 async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form(""),
-                      user=Depends(require_user)):
+                      mode: str = Form("add"), user=Depends(require_user)):
     items = paste.parse(text)
     added, updated, refreshed, skipped = [], [], [], []
     form = await request.form()
@@ -692,12 +715,13 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
                 gid = found["game"]["id"]
                 if item["steam_appid"] or item["url"]:
                     link_to(conn, gid, item)
-                elif decision != "update":
-                    skipped.append(item["title"])
-                # An update is never assumed - pasting the same list twice
-                # would otherwise charge slots and unverify everything again.
-                if decision == "update":
+                # In update mode every title already present is a new build,
+                # which is the whole point of pasting that batch. In add mode
+                # it is never assumed, so re-pasting a list is harmless.
+                if mode == "update" or decision == "update":
                     mark_updated(conn, gid, item)
+                elif not (item["steam_appid"] or item["url"]):
+                    skipped.append(item["title"])
                 continue
 
             if found["kind"] == "near":
@@ -716,6 +740,12 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
                     skipped.append(item["title"])
                     continue
 
+            # Update mode never creates anything: a title that is not there has
+            # no build to update, and silently adding it would spend a slot on
+            # something the batch was not about.
+            if mode == "update":
+                skipped.append(item["title"])
+                continue
             appid = item["steam_appid"]
             cur = conn.execute(
                 "INSERT INTO games (title, title_norm, section, date_added, verified,"
@@ -736,7 +766,7 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
                     metadata.apply(conn, entry["id"], meta)
 
     exporter.export(tag="add")
-    return render(request, "add.html", user=user, parsed=None,
+    return render(request, "add.html", user=user, parsed=None, mode=mode,
                   result={"added": added, "updated": updated,
                           "refreshed": refreshed, "skipped": skipped})
 

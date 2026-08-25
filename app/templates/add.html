@@ -3,8 +3,25 @@
 {% block title %}Add &middot; GameRank{% endblock %}
 {% block body %}
 
-<h1>Add games</h1>
-<p class="sub">Paste the list you post to Discord. {{ slots.balance }} slots free.</p>
+<h1>{{ 'Updated games' if mode == 'update' else 'Add games' }}</h1>
+<p class="sub">
+  {% if mode == 'update' %}
+    Paste a batch of updates. Every title already in the library goes back to
+    unverified and costs a slot.
+  {% else %}
+    Paste a batch of new games.
+  {% endif %}
+  {{ slots.balance }} slots free.
+</p>
+
+<div class="seg" style="margin-bottom:18px">
+  <input type="radio" name="modepick" id="mode-add" {{ 'checked' if mode != 'update' }}
+         onchange="location.href='/add'" style="width:auto">
+  <label for="mode-add">New games</label>
+  <input type="radio" name="modepick" id="mode-upd" {{ 'checked' if mode == 'update' }}
+         onchange="location.href='/add?mode=update'" style="width:auto">
+  <label for="mode-upd">Updates</label>
+</div>
 
 {% if result %}
   <div class="flash">
@@ -52,10 +69,12 @@
 {% endif %}
 
 {% if parsed %}
-  {% set new_count = parsed | selectattr('match.kind', 'equalto', 'new') | list | length %}
+  {% set exact_count = parsed | selectattr('match.kind', 'equalto', 'exact') | list | length %}
+  {% set new_count = 0 if mode == 'update' else (parsed | selectattr('match.kind', 'equalto', 'new') | list | length) %}
   {% set near_count = parsed | selectattr('match.kind', 'equalto', 'near') | list | length %}
   <form method="post" action="/add/confirm">
     <input type="hidden" name="text" value="{{ raw }}">
+    <input type="hidden" name="mode" value="{{ mode }}">
     <div class="tablewrap" style="margin-bottom:14px">
       <table>
         <thead><tr><th>Pasted title</th><th>AppID</th><th>Match</th></tr></thead>
@@ -66,6 +85,10 @@
             <td style="color:var(--dim)">{{ p.steam_appid or '—' }}</td>
             <td class="wrap">
               {% if p.match.kind == 'exact' %}
+                {% if mode == 'update' %}
+                  <span class="tag ok">update</span>
+                  <span style="color:var(--dim)">back to unverified, costs a slot</span>
+                {% else %}
                 <span class="tag ok">in library</span>
                 <div style="margin-top:6px">
                   <label style="display:block;margin-bottom:4px">
@@ -79,9 +102,15 @@
                     this is an update &mdash; back to unverified, costs a slot
                   </label>
                 </div>
+                {% endif %}
               {% elif p.match.kind == 'new' %}
+                {% if mode == 'update' %}
+                  <span class="tag no">not in the library</span>
+                  <span style="color:var(--dim)">nothing to update &mdash; add it as a new game instead</span>
+                {% else %}
                 <span class="tag warn">not found</span>
                 <span style="color:var(--dim)">will be added, costs a slot</span>
+                {% endif %}
               {% else %}
                 <span class="tag no">check this</span>
                 <div style="margin-top:6px">
@@ -118,8 +147,11 @@
         </tbody>
       </table>
     </div>
-    <p class="sub" id="tally" data-base="{{ new_count }}" data-balance="{{ slots.balance }}">
-      {{ new_count }} to add, costs {{ new_count }} slot{{ "" if new_count == 1 else "s" }}. You have {{ slots.balance }}.
+    <p class="sub" id="tally"
+       data-base="{{ (exact_count if mode == 'update' else new_count) }}"
+       data-balance="{{ slots.balance }}">
+      {% if mode == 'update' %}{{ exact_count }} to update{% else %}{{ new_count }} to add{% endif %},
+      costs {{ exact_count if mode == 'update' else new_count }} slots. You have {{ slots.balance }}.
       {% if near_count %}{{ near_count }} need{{ 's' if near_count == 1 else '' }} a decision above.{% endif %}
     </p>
     <div class="row">
@@ -153,6 +185,7 @@ recount();
   </form>
 {% else %}
   <form method="post" action="/add/preview">
+    <input type="hidden" name="mode" value="{{ mode }}">
     <label class="lbl" for="text">Paste list</label>
     <textarea name="text" id="text" required style="min-height:200px"
       placeholder="* [Fish Hunters](https://store.steampowered.com/app/3468330/)"></textarea>

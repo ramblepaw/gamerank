@@ -51,72 +51,101 @@ def _reset(name: str, total: int) -> None:
     with _lock:
         _state.update({
             "name": name, "running": True, "cancel": False,
-            "total": total, "done": 0, "found": 0, "renamed": 0, "current": "",
+            "total": total, "done": 0, "found": 0, "renamed": 0, "retrying": False,
+            "current": "",
             "started_at": time.time(), "finished_at": None,
             "misses": [], "error": "",
         })
 
 
 def _worker(rows, user_id, overwrite):
+    """Walk the library, then walk the failures again.
+
+    A miss costs nine or ten IGDB requests, so a full run makes thousands and
+    some come back empty from throttling or a timeout rather than because the
+    game isn't there. Those look identical to a genuine no-match, so the only
+    honest way to tell them apart is to ask again - a second pass over the
+    misses recovers them instead of writing them off.
+    """
     try:
-        for row in rows:
+        _pass(rows, user_id, overwrite)
+
+        with _lock:
+            retry_ids = [m["id"] for m in _state["misses"]]
+            cancelled = _state["cancel"]
+        if retry_ids and not cancelled:
+            with db() as conn:
+                marks = ",".join("?" for _ in retry_ids)
+                again = [dict(r) for r in conn.execute(
+                    "SELECT id, title, steam_appid FROM games WHERE id IN (%s)" % marks,
+                    retry_ids)]
             with _lock:
-                if _state["cancel"]:
-                    break
-                _state["current"] = row["title"]
-
-            try:
-                meta = metadata.lookup(row["title"], row["steam_appid"])
-            except Exception as exc:                      # keep the run alive
-                meta = {}
-                with _lock:
-                    _state["error"] = "%s: %s" % (row["title"][:40], exc)
-
-            if meta and meta.get("cover_url"):
-                # Only correct actual misspellings. A subtitle or prefix match
-                # is not a typo - renaming "Shapez 2" to "Shapez 2: Factory"
-                # would be rewriting a title that was already right.
-                # Correct misspellings, but never swap a plain title for a
-                # subtitled one: "Snalland" should not become "Smalland:
-                # Survive the Wilds VR". The art is right either way; the
-                # title is the part that's risky to rewrite.
-                new_title = meta.get("title") or ""
-                gains_subtitle = (":" in new_title and ":" not in row["title"])
-                renamed = (overwrite and new_title
-                           and meta.get("match_kind") in ("typo", "similar")
-                           and not gains_subtitle
-                           and new_title != row["title"])
-                with db() as conn:
-                    metadata.apply(conn, row["id"], meta, overwrite_title=renamed)
-                    if renamed:
-                        # Keep the old spelling so a bad rename can be undone.
-                        log_audit(conn, row["id"], user_id, "renamed",
-                                  '"%s" -> "%s"' % (row["title"], meta["title"]))
-                with _lock:
-                    _state["found"] += 1
-                    if renamed:
-                        _state["renamed"] += 1
-            else:
-                with _lock:
-                    _state["misses"].append({
-                        "id": row["id"], "title": row["title"],
-                        "ambiguous": len(meta.get("ambiguous", [])) if meta else 0,
-                    })
-
-            with _lock:
-                _state["done"] += 1
+                _state["retrying"] = True
+                _state["misses"] = []
+                _state["total"] += len(again)
+            _pass(again, user_id, overwrite)
     finally:
         with _lock:
             _state["running"] = False
+            _state["retrying"] = False
             _state["current"] = ""
             _state["finished_at"] = time.time()
             found, total, ren = _state["found"], _state["done"], _state["renamed"]
         try:
             with db() as conn:
                 log_audit(conn, None, user_id, "art fetch",
-                          "%d of %d matched, %d renamed" % (found, total, ren))
+                          "%d matched, %d renamed" % (found, ren))
         except Exception:
             pass
+
+
+def _pass(rows, user_id, overwrite):
+    for row in rows:
+        with _lock:
+            if _state["cancel"]:
+                break
+            _state["current"] = row["title"]
+
+        try:
+            meta = metadata.lookup(row["title"], row["steam_appid"])
+        except Exception as exc:                      # keep the run alive
+            meta = {}
+            with _lock:
+                _state["error"] = "%s: %s" % (row["title"][:40], exc)
+
+        if meta and meta.get("cover_url"):
+            # Only correct actual misspellings. A subtitle or prefix match
+            # is not a typo - renaming "Shapez 2" to "Shapez 2: Factory"
+            # would be rewriting a title that was already right.
+            # Correct misspellings, but never swap a plain title for a
+            # subtitled one: "Snalland" should not become "Smalland:
+            # Survive the Wilds VR". The art is right either way; the
+            # title is the part that's risky to rewrite.
+            new_title = meta.get("title") or ""
+            gains_subtitle = (":" in new_title and ":" not in row["title"])
+            renamed = (overwrite and new_title
+                       and meta.get("match_kind") in ("typo", "similar")
+                       and not gains_subtitle
+                       and new_title != row["title"])
+            with db() as conn:
+                metadata.apply(conn, row["id"], meta, overwrite_title=renamed)
+                if renamed:
+                    # Keep the old spelling so a bad rename can be undone.
+                    log_audit(conn, row["id"], user_id, "renamed",
+                              '"%s" -> "%s"' % (row["title"], meta["title"]))
+            with _lock:
+                _state["found"] += 1
+                if renamed:
+                    _state["renamed"] += 1
+        else:
+            with _lock:
+                _state["misses"].append({
+                    "id": row["id"], "title": row["title"],
+                    "ambiguous": len(meta.get("ambiguous", [])) if meta else 0,
+                })
+
+        with _lock:
+            _state["done"] += 1
 
 
 def start_art_fetch(user_id=None, only_missing: bool = True,

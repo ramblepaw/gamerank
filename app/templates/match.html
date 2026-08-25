@@ -10,6 +10,7 @@
 </p>
 
 <form class="filters" method="get" action="/game/{{ g.id }}/match">
+  <input type="hidden" name="back" value="{{ back }}">
   <div class="wide">
     <label class="lbl" for="q">Search IGDB</label>
     <input type="search" name="q" id="q" value="{{ term }}">
@@ -25,6 +26,7 @@
   <form method="post" action="/game/{{ g.id }}/match">
     <input type="hidden" name="igdb_id" value="{{ r.igdb_id }}">
     <input type="hidden" name="term" value="{{ term }}">
+    <input type="hidden" name="back" value="{{ back }}">
     <div class="tile" style="cursor:default">
       <div class="art">
         {% if r.cover_url %}
@@ -48,5 +50,8 @@
 </div>
 {% endif %}
 
-<p style="margin-top:20px"><a class="btn" href="/game/{{ g.id }}">Back to game</a></p>
+<p style="margin-top:20px">
+  {% if back %}<a class="btn" href="{{ back }}">&larr; Back</a>{% endif %}
+  <a class="btn" href="/game/{{ g.id }}">Game page</a>
+</p>
 {% endblock %}
