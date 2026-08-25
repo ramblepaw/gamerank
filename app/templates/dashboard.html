@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import tile %}
+{% from "macros.html" import tile with context %}
 {% set nav = 'dash' %}
 {% block title %}Overview &middot; GameRank{% endblock %}
 {% block body %}
@@ -39,7 +39,7 @@
   <div>
     <div class="n">{{ no_art_count }}</div>
     <div class="l">needs art</div>
-    {% if no_art_count %}<div class="hint"><a href="/needs-art">work through them</a></div>{% endif %}
+    {% if no_art_count and not user.is_guest %}<div class="hint"><a href="/needs-art">work through them</a></div>{% endif %}
   </div>
 </div>
 
@@ -71,11 +71,13 @@
       {% else %}<p class="sub" style="margin:0">None yet.</p>{% endif %}
     </div>
 
+    {% if not user.is_guest %}
     <h2>Wishlist</h2>
     <div class="card grain">
       <div class="n" style="font-size:24px;font-weight:600">{{ wishlist }}</div>
       <div class="l" style="color:var(--dim);font-size:12px">waiting &mdash; <a href="/wishlist">open</a></div>
     </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

@@ -120,6 +120,36 @@ def require_admin(request: Request):
     return user
 
 
+# --------------------------------------------------------------------- guests
+
+# The viewing account exists so people on the game server can look up a grade
+# without needing an account each. It is shared, so it gets no write of any
+# kind: this is the single choke point, and a route added later is refused by
+# default rather than having to be remembered and guarded.
+GUEST_PAGES = {"/", "/library", "/recent", "/export.txt", "/logout", "/healthz"}
+
+
+def guest_may_see(method: str, path: str) -> bool:
+    if method not in ("GET", "HEAD"):
+        return False
+    if path in GUEST_PAGES or path.startswith("/cover/"):
+        return True
+    return bool(re.fullmatch(r"/game/\d+", path))
+
+
+@app.middleware("http")
+async def _guest_is_read_only(request: Request, call_next):
+    path = request.url.path
+    if not path.startswith("/static/"):
+        user = current_user(request)
+        if user and user["is_guest"] and not guest_may_see(request.method, path):
+            return HTMLResponse(
+                "<h1>Viewing only</h1><p>This account can browse the library but"
+                " cannot change anything.</p><p><a href='/'>Back</a></p>",
+                status_code=403)
+    return await call_next(request)
+
+
 @app.exception_handler(HTTPException)
 async def _redirect_handler(request: Request, exc: HTTPException):
     if exc.status_code == 307 and "Location" in (exc.headers or {}):
@@ -162,25 +192,23 @@ def render(request: Request, template: str, **ctx):
 
 @app.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
-    with db() as conn:
-        users = [dict(r) for r in conn.execute(
-            "SELECT id, username FROM users ORDER BY username")]
     return templates.TemplateResponse(
-        "login.html", {"request": request, "users": users, "user": None,
+        "login.html", {"request": request, "user": None,
                        "error": None, "asset_v": ASSET_V})
 
 
 @app.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form("")):
     with db() as conn:
-        row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-        users = [dict(r) for r in conn.execute(
-            "SELECT id, username FROM users ORDER BY username")]
+        row = conn.execute("SELECT * FROM users WHERE username = ?",
+                           (username.strip().lower(),)).fetchone()
     if not row or not verify_password(password, row["password_hash"] or ""):
+        # Deliberately the same message either way, so the page cannot be used
+        # to find out which accounts exist.
         return templates.TemplateResponse(
             "login.html",
-            {"request": request, "users": users, "user": None,
-             "error": "Wrong password.", "asset_v": ASSET_V},
+            {"request": request, "user": None,
+             "error": "That username and password do not match.", "asset_v": ASSET_V},
             status_code=401)
     resp = RedirectResponse("/", status_code=303)
     resp.set_cookie("grt_session", signer.dumps({"uid": row["id"]}),
@@ -930,7 +958,10 @@ def wishlist_delete(request: Request, item_id: int, user=Depends(require_user)):
 def admin_page(request: Request, user=Depends(require_admin)):
     with db() as conn:
         users = [dict(r) for r in conn.execute(
-            "SELECT id, username, is_admin FROM users ORDER BY username")]
+            "SELECT id, username, is_admin FROM users WHERE COALESCE(is_guest, 0) = 0"
+            " ORDER BY username")]
+        guest = conn.execute(
+            "SELECT username, password_hash FROM users WHERE is_guest = 1").fetchone()
         settings = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings")}
         events = [dict(r) for r in slots.recent_events(conn, 20)]
         no_cover = conn.execute(
@@ -942,6 +973,7 @@ def admin_page(request: Request, user=Depends(require_admin)):
         exports = []
     return render(request, "admin.html", user=user, users=users, settings=settings,
                   events=events, exports=exports, no_cover=no_cover,
+                  guest=dict(guest) if guest else None,
                   igdb=metadata.igdb_available(), job=jobs.status())
 
 
@@ -973,10 +1005,27 @@ def admin_users(request: Request, username: str = Form(...),
         return RedirectResponse("/admin", status_code=303)
     with db() as conn:
         conn.execute(
-            "INSERT INTO users (username, display_name, password_hash, is_admin, created_at)"
-            " VALUES (?, ?, ?, ?, ?) ON CONFLICT(username) DO UPDATE SET"
-            " display_name = excluded.username, is_admin = excluded.is_admin",
+            "INSERT INTO users (username, display_name, password_hash, is_admin, is_guest,"
+            " created_at) VALUES (?, ?, ?, ?, 0, ?) ON CONFLICT(username) DO UPDATE SET"
+            " display_name = excluded.username, is_admin = excluded.is_admin, is_guest = 0",
             (name, name, hash_password(password), 1 if is_admin == "1" else 0, now()))
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/guest")
+def admin_guest(request: Request, action: str = Form("on"), password: str = Form(""),
+                user=Depends(require_admin)):
+    """Turn the shared viewing account on or off, or change its password."""
+    with db() as conn:
+        if action == "off":
+            conn.execute("DELETE FROM users WHERE is_guest = 1")
+        else:
+            conn.execute(
+                "INSERT INTO users (username, display_name, password_hash, is_admin, is_guest,"
+                " created_at) VALUES ('guest', 'guest', ?, 0, 1, ?)"
+                " ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash,"
+                " is_admin = 0, is_guest = 1",
+                (hash_password(password), now()))
     return RedirectResponse("/admin", status_code=303)
 
 

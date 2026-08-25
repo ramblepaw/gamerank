@@ -145,6 +145,39 @@
       </p>
     </form>
 
+    <h2>Viewing account</h2>
+    <div class="card grain">
+      <p class="sub" style="margin:0 0 12px">
+        One shared sign-in for people who only want to look things up, so they can
+        check what a game scored before suggesting it again. It can read the
+        masterlist and game pages and nothing else &mdash; no verifying, grading,
+        slating, adding or deleting.
+      </p>
+      {% if guest %}
+      <p style="margin:0 0 12px">
+        On. Username <b>{{ guest.username }}</b>,
+        {% if guest.password_hash %}password set{% else %}<b>no password</b> &mdash; anyone
+        who can reach this site can sign in as it{% endif %}.
+      </p>
+      {% endif %}
+      <form method="post" action="/admin/guest">
+        <label class="lbl" for="guestpw">Password</label>
+        <input type="password" name="password" id="guestpw" autocomplete="new-password">
+        <div class="row" style="margin-top:12px">
+          <button class="primary" type="submit" name="action" value="on">
+            {{ 'Change password' if guest else 'Turn on' }}</button>
+          {% if guest %}
+          <button class="bad" type="submit" name="action" value="off" formnovalidate
+                  onclick="return confirm('Turn the viewing account off? Anyone signed in as it is signed out.')">
+            Turn off</button>
+          {% endif %}
+        </div>
+        <p class="sub" style="font-size:12px;margin:10px 0 0">
+          Blank means no password at all. Hand out the username and password together.
+        </p>
+      </form>
+    </div>
+
   </div>
 
   <div>

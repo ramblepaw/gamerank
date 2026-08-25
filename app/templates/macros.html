@@ -21,11 +21,12 @@
       {% if g.keep_flag == 'remove' and not g.slated_at %}<span class="tag no">cut</span>{% endif %}
     </span>
     <span class="tileacts">
+      {% set may_edit = not (user and user.is_guest) %}
       {% if g.store_url %}
         <a class="tileact" href="{{ g.store_url }}" target="_blank" rel="noopener"
            title="Store page">store</a>
       {% endif %}
-      {% if g.status == 'active' %}
+      {% if g.status == 'active' and may_edit %}
         {% if g.slated_at %}
         <form method="post" action="/game/{{ g.id }}/unslate">
           <button class="tileact" type="submit" title="Take off the removal list">keep</button>

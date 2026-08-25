@@ -14,26 +14,13 @@
   {% if error %}<div class="flash warn">{{ error }}</div>{% endif %}
 
   <form method="post" action="/login" class="card grain">
-    {% if users %}
-      {# Names shown outright. A dropdown hides who exists behind a click, on a
-         page whose only job is picking between two or three people. #}
-      <label class="lbl">Who are you?</label>
-      <div class="seg" style="flex-direction:column;align-items:stretch">
-        {% for u in users %}
-        <input type="radio" name="username" id="u-{{ u.id }}" value="{{ u.username }}"
-               {{ 'checked' if loop.first }}>
-        <label for="u-{{ u.id }}" style="text-align:left">{{ u.username }}</label>
-        {% endfor %}
-      </div>
-    {% else %}
-      <label class="lbl" for="username">Username</label>
-      <input type="text" name="username" id="username" value="admin">
-    {% endif %}
+    <label class="lbl" for="username">Username</label>
+    <input type="text" name="username" id="username" autocomplete="username"
+           autocapitalize="none" autocorrect="off" spellcheck="false" autofocus required>
 
     <div style="height:14px"></div>
     <label class="lbl" for="password">Password</label>
     <input type="password" name="password" id="password" autocomplete="current-password">
-    <p class="sub" style="font-size:12px;margin:6px 0 0">Leave blank if none is set.</p>
 
     <div style="height:14px"></div>
     <button class="primary" type="submit" style="width:100%">Sign in</button>

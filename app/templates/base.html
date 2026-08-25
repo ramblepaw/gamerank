@@ -17,6 +17,7 @@
   <div class="top-inner">
     <a class="brand" href="/">GameRank</a>
     <nav>
+      {% if not user.is_guest %}
       <details class="menu {{ 'on' if tools }}">
         <summary>Tools</summary>
         <div class="menu-items">
@@ -24,17 +25,21 @@
           <a href="/grade" class="{{ 'here' if nav == 'grade' }}">Grade</a>
         </div>
       </details>
+      {% endif %}
 
       <details class="menu {{ 'on' if masters }}">
         <summary>Library</summary>
         <div class="menu-items">
           <a href="/library" class="{{ 'here' if nav == 'library' }}">Masterlist</a>
           <a href="/recent" class="{{ 'here' if nav == 'recent' }}">Recent</a>
+          {% if not user.is_guest %}
           <a href="/removal" class="{{ 'here' if nav == 'removal' }}">Removal</a>
           <a href="/wishlist" class="{{ 'here' if nav == 'wishlist' }}">Wishlist</a>
+          {% endif %}
         </div>
       </details>
 
+      {% if not user.is_guest %}
       <details class="menu {{ 'on' if manage }}">
         <summary>Management{% if mgmt_badge %}<span class="badge">{{ mgmt_badge }}</span>{% endif %}</summary>
         <div class="menu-items">
@@ -44,18 +49,25 @@
           {% if user.is_admin %}<a href="/admin" class="{{ 'here' if nav == 'admin' }}">Admin</a>{% endif %}
         </div>
       </details>
+      {% endif %}
     </nav>
 
     <div class="who">
+      {% if user.is_guest %}
+      <span class="slotpill" title="This account can look but not change anything">viewing</span>
+      {% else %}
       <span class="slotpill {{ 'out' if slots.balance <= 0 else ('low' if slots.balance <= 10 else '') }}"
             title="Slots left for new games">
         <b>{{ slots.balance }}</b>/{{ slots.limit }} slots
       </span>
+      {% endif %}
       <details class="menu right {{ 'on' if nav in ['look', 'account'] }}">
         <summary>{{ user.username }}</summary>
         <div class="menu-items">
+          {% if not user.is_guest %}
           <a href="/account" class="{{ 'here' if nav == 'account' }}">Account</a>
           <a href="/look" class="{{ 'here' if nav == 'look' }}">Look</a>
+          {% endif %}
           <a href="/logout">Sign out</a>
         </div>
       </details>

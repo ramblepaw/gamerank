@@ -210,6 +210,8 @@ MIGRATIONS = [
     ("games", "slated_at", "TEXT"),
     # Last masterlist filter set, so returning to it resumes where you were.
     ("users", "library_filters", "TEXT"),
+    # A shared, read-only account for people who just want to look.
+    ("users", "is_guest", "INTEGER"),
 ]
 
 

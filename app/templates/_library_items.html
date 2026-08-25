@@ -1,6 +1,7 @@
 {# Just the repeatable units, so the same markup serves the first page and
    every page appended by the scroller. #}
-{% from "macros.html" import tile, thumb, steamlink %}
+{% from "macros.html" import thumb, steamlink %}
+{% from "macros.html" import tile with context %}
 {% if view == 'grid' %}
   {% for g in games %}{{ tile(g) }}{% endfor %}
 {% else %}

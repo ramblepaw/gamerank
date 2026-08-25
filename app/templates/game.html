@@ -23,6 +23,7 @@
     </div>
     {% if err %}<div class="flash warn" style="margin-top:10px">{{ err }}</div>{% endif %}
 
+    {% if not user.is_guest %}
     <p style="margin-top:10px">
       <a class="btn" style="display:block;text-align:center"
          href="https://duckduckgo.com/?iax=images&ia=images&q={{ (g.title ~ ' game cover art') | urlencode }}"
@@ -77,9 +78,61 @@
       </ul>
       {% else %}<p style="margin:0">Nothing yet.</p>{% endif %}
     </div>
+    {% endif %}
   </div>
 
   <div>
+    {% if user.is_guest %}
+    {# Viewing account: the same facts, none of the controls. #}
+    <div class="card grain">
+      <div class="row">
+        <div class="grow">
+          <div class="lbl">Grade</div>
+          {% if g.grade %}<span class="grade-letter g-{{ g.grade }}">{{ g.grade }}</span>
+          {% else %}<span class="sub">ungraded</span>{% endif %}
+        </div>
+        <div class="grow">
+          <div class="lbl">Works</div>
+          {% if not g.verified %}<span class="sub">not checked yet</span>
+          {% elif g.broken %}<span class="tag no">{{ (g.broken_status or 'broken').replace('_', ' ') }}</span>
+          {% else %}<span class="tag ok">yes</span>{% endif %}
+        </div>
+        <div class="grow">
+          <div class="lbl">Played</div>
+          {{ g.playtime_minutes ~ ' min' if g.playtime_minutes is not none else '—' }}
+        </div>
+        <div class="grow">
+          <div class="lbl">Keep</div>
+          {{ g.keep_flag or '—' }}
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <div class="grow">
+          <div class="lbl">Added</div>{{ g.date_added or '—' }}
+        </div>
+        <div class="grow">
+          <div class="lbl">Updated</div>{{ g.last_updated or '—' }}
+        </div>
+        <div class="grow">
+          <div class="lbl">Section</div>{{ g.section or '—' }}
+        </div>
+        <div class="grow">
+          <div class="lbl">Version</div>{{ g.version or '—' }}
+        </div>
+      </div>
+
+      {% if g.notes %}
+      <div style="margin-top:14px">
+        <div class="lbl">Notes</div>
+        <p style="margin:4px 0 0;white-space:pre-wrap">{{ g.notes }}</p>
+      </div>
+      {% endif %}
+    </div>
+    <p class="sub" style="font-size:12px">
+      Read only &mdash; grades and notes are set by the people running the server.
+    </p>
+    {% else %}
     <form class="card grain" method="post" action="/game/{{ g.id }}">
       <div class="row">
         <div class="grow" style="flex:3">
@@ -177,6 +230,7 @@
         {% endif %}
       </div>
     </form>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
