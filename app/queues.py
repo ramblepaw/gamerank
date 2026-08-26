@@ -2,8 +2,8 @@
 
 Each user holds a fixed slate of N games per queue. Random draw, because size
 and setup effort vary so much that any manual pick becomes a biased pick.
-Resolve one and the empty position refills. A game held in one user's slate is
-not offered to anyone else.
+Resolve one and the rest move up, with the replacement added at the bottom. A
+game held in one user's slate is not offered to anyone else.
 """
 from .db import db, now, get_setting_conn
 
@@ -35,51 +35,52 @@ def pool_count(conn, queue: str) -> int:
 
 
 def refill(conn, user_id: int, queue: str) -> None:
-    """Top the slate back up to queue_size with random eligible games."""
+    """Top the slate back up to queue_size, adding new games at the bottom.
+
+    Positions stay a compact run. Resolve one and the games under it move up,
+    so its replacement arrives at the end of the slate rather than appearing in
+    a row that has just been dealt with and read as still needing attention.
+    """
     size = queue_size(conn)
 
-    conn.execute(
-        "DELETE FROM queue_slots WHERE user_id = ? AND queue = ? AND position >= ?",
-        (user_id, queue, size),
-    )
-
-    existing = {
-        r["position"]: r["game_id"]
+    current = [
+        (r["position"], r["game_id"])
         for r in conn.execute(
-            "SELECT position, game_id FROM queue_slots WHERE user_id = ? AND queue = ?",
+            "SELECT position, game_id FROM queue_slots WHERE user_id = ? AND queue = ?"
+            " ORDER BY position",
             (user_id, queue),
         )
-    }
+    ]
+    held = [gid for _, gid in current if gid is not None]
 
     # Drop anything that no longer belongs in this queue (resolved elsewhere).
     valid = {r["id"] for r in conn.execute(POOL_SQL[queue])}
-    for pos, gid in list(existing.items()):
-        if gid is not None and gid not in valid:
-            conn.execute(
-                "UPDATE queue_slots SET game_id = NULL WHERE user_id = ? AND queue = ? AND position = ?",
-                (user_id, queue, pos),
-            )
-            existing[pos] = None
+    kept, seen = [], set()
+    for gid in held:
+        if gid in valid and gid not in seen:
+            kept.append(gid)
+            seen.add(gid)
+    kept = kept[:size]
 
-    taken = {g for g in existing.values() if g is not None} | _held_elsewhere(conn, user_id, queue)
-    need = [p for p in range(size) if existing.get(p) is None]
-    if not need:
+    if len(kept) < size:
+        taken = set(kept) | _held_elsewhere(conn, user_id, queue)
+        sql = POOL_SQL[queue]
+        if taken:
+            sql += " AND id NOT IN (%s)" % ",".join("?" for _ in taken)
+        sql += " ORDER BY RANDOM() LIMIT ?"
+        kept += [r["id"] for r in conn.execute(sql, (*taken, size - len(kept)))]
+
+    wanted = list(enumerate(kept))
+    if wanted == current:                    # every page view calls this
         return
 
-    placeholders = ",".join("?" for _ in taken) if taken else ""
-    sql = POOL_SQL[queue]
-    if taken:
-        sql += f" AND id NOT IN ({placeholders})"
-    sql += " ORDER BY RANDOM() LIMIT ?"
-    picks = [r["id"] for r in conn.execute(sql, (*taken, len(need)))]
-
-    for pos in need:
-        gid = picks.pop() if picks else None
+    conn.execute("DELETE FROM queue_slots WHERE user_id = ? AND queue = ?", (user_id, queue))
+    stamp = now()
+    for pos, gid in wanted:
         conn.execute(
             "INSERT INTO queue_slots (user_id, queue, position, game_id, created_at)"
-            " VALUES (?, ?, ?, ?, ?)"
-            " ON CONFLICT(user_id, queue, position) DO UPDATE SET game_id = excluded.game_id",
-            (user_id, queue, pos, gid, now()),
+            " VALUES (?, ?, ?, ?, ?)",
+            (user_id, queue, pos, gid, stamp),
         )
 
 
@@ -95,8 +96,9 @@ def slate(conn, user_id: int, queue: str):
 
 
 def clear_slot(conn, user_id: int, queue: str, game_id: int) -> None:
+    """Take a resolved game out. refill() closes the gap and appends a new one."""
     conn.execute(
-        "UPDATE queue_slots SET game_id = NULL WHERE user_id = ? AND queue = ? AND game_id = ?",
+        "DELETE FROM queue_slots WHERE user_id = ? AND queue = ? AND game_id = ?",
         (user_id, queue, game_id),
     )
 

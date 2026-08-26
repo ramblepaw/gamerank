@@ -24,7 +24,7 @@
       {% set may_edit = not (user and user.is_guest) %}
       {% if g.store_url %}
         <a class="tileact" href="{{ g.store_url }}" target="_blank" rel="noopener"
-           title="Store page">store</a>
+           title="Store page">Store</a>
       {% endif %}
       {% if g.status == 'active' and may_edit %}
         {% if g.slated_at %}
@@ -59,5 +59,5 @@
 {% endmacro %}
 
 {% macro steamlink(g) %}
-  {% if g.store_url %}<a href="{{ g.store_url }}" target="_blank" rel="noopener">store</a>{% endif %}
+  {% if g.store_url %}<a href="{{ g.store_url }}" target="_blank" rel="noopener">Store</a>{% endif %}
 {% endmacro %}

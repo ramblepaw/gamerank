@@ -13,7 +13,7 @@
   {% if g.broken %}<span class="tag no">{{ (g.broken_status or 'broken').replace('_', ' ') }}</span>{% endif %}
   {% if g.slated_at %}<span class="tag no">slated for removal</span>{% endif %}
   {% if g.status == 'removed' %}<span class="tag warn">removed</span>{% endif %}
-  {% if g.store_url %}&middot; <a href="{{ g.store_url }}" target="_blank" rel="noopener">store page</a>{% endif %}
+  {% if g.store_url %}&middot; <a href="{{ g.store_url }}" target="_blank" rel="noopener">Store page</a>{% endif %}
 </p>
 
 <div class="split3">
