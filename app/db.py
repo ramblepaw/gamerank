@@ -16,6 +16,10 @@ EXPORT_DIR = os.path.join(DATA_DIR, "exports")
 GRADES = ["S", "A", "B", "C", "D"]
 GAME_STATUSES = ["active", "removed"]
 
+# Who compressed the copy on the server. None is a plain install.
+REPACKS = [("fitgirl", "FitGirl"), ("dodi", "DODI")]
+REPACK_KEYS = [key for key, _ in REPACKS]
+
 # Date the first game went on the server. Used when a row has no date.
 FALLBACK_DATE = "2025-02-04"
 
@@ -49,6 +53,7 @@ CREATE TABLE IF NOT EXISTS games (
     pre_tested        INTEGER NOT NULL DEFAULT 0,
 
     broken            INTEGER NOT NULL DEFAULT 0,
+    repack            TEXT,
 
     grade             TEXT,
     graded_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -237,6 +242,7 @@ MIGRATIONS = [
     # Alphabetical key with the leading article dropped. Stored rather than
     # recomputed per query so the masterlist can sort and index on it.
     ("games", "title_sort", "TEXT"),
+    ("games", "repack", "TEXT"),
 ]
 
 

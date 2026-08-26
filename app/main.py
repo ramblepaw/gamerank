@@ -15,7 +15,8 @@ from itsdangerous import URLSafeSerializer, BadSignature
 from . import slots, queues, exporter, importer, metadata, paste, jobs, themes, grades
 from .db import (
     db, init_db, now, today, norm_title, sort_title, log_audit, get_setting_conn, set_setting,
-    hash_password, verify_password, GRADES, EXPORT_DIR, FALLBACK_DATE, DATA_DIR,
+    hash_password, verify_password, GRADES, REPACKS, REPACK_KEYS,
+    EXPORT_DIR, FALLBACK_DATE, DATA_DIR,
     THEMES, ACCENTS, DENSITIES, TILE_SIZES, THEME_TOKENS, DEFAULT_THEME,
 )
 
@@ -289,13 +290,16 @@ def verify_queue(request: Request, user=Depends(require_user)):
     with db() as conn:
         games = [dict(r) for r in queues.slate(conn, user["id"], queues.VERIFY)]
         remaining = queues.pool_count(conn, queues.VERIFY, user["id"])
-    return render(request, "verify.html", user=user, games=games, remaining=remaining)
+    return render(request, "verify.html", user=user, games=games, remaining=remaining,
+                  repacks=REPACKS)
 
 
 @app.post("/verify/{game_id}")
 def verify_submit(request: Request, game_id: int, works: str = Form(...),
-                  notes: str = Form(""), user=Depends(require_user)):
+                  notes: str = Form(""), repack: str = Form(""),
+                  user=Depends(require_user)):
     ok = works == "yes"
+    repack = repack if repack in REPACK_KEYS else None
     with db() as conn:
         game = conn.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
         if not game:
@@ -306,9 +310,9 @@ def verify_submit(request: Request, game_id: int, works: str = Form(...),
 
         conn.execute(
             "UPDATE games SET verified = 1, verified_by = ?, verified_at = ?,"
-            " broken = ?, notes = ?, updated_at = ? WHERE id = ?",
+            " broken = ?, notes = ?, repack = ?, updated_at = ? WHERE id = ?",
             (user["id"], now(), 0 if ok else 1,
-             notes.strip() or game["notes"], now(), game_id))
+             notes.strip() or game["notes"], repack, now(), game_id))
         if ok:
             slots.credit_check(conn, game_id, user["id"])
         log_audit(conn, game_id, user["id"], "verified", "works" if ok else "broken")
@@ -509,7 +513,7 @@ def game_detail(request: Request, game_id: int, err: str = "", user=Depends(requ
         mine = grades.for_game(conn, game_id).get(user["id"])
         sections = section_names(conn)
     return render(request, "game.html", user=user, g=dict(row), history=history, err=err,
-                  grades=GRADES, panels=panels,
+                  grades=GRADES, panels=panels, repacks=REPACKS,
                   mine=dict(mine) if mine else None, sections=sections,
                   igdb=metadata.igdb_available())
 
@@ -519,6 +523,7 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
                 verified: str = Form(""), grade: str = Form(""), playtime: str = Form(""),
                 keep_flag: str = Form(""), notes: str = Form(""),
                 works: str = Form("yes"), version: str = Form(""),
+                repack: str = Form(""),
                 section: str = Form(""), date_added: str = Form(""),
                 steam_appid: str = Form(""), cover_url: str = Form(""),
                 store_url: str = Form(""), user=Depends(require_user)):
@@ -553,12 +558,13 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
 
         conn.execute(
             "UPDATE games SET title = ?, title_norm = ?, title_sort = ?, section = ?,"
-            " date_added = ?, verified = ?, notes = ?, broken = ?,"
+            " date_added = ?, verified = ?, notes = ?, broken = ?, repack = ?,"
             " version = ?, steam_appid = ?, cover_url = ?, store_url = ?, updated_at = ?"
             " WHERE id = ?",
             (title.strip(), norm_title(title), sort_title(title), section.strip() or None,
              date_added.strip() or FALLBACK_DATE, is_verified, notes.strip() or None,
-             is_broken, version.strip() or None, appid,
+             is_broken, repack if repack in REPACK_KEYS else None,
+             version.strip() or None, appid,
              cover_url.strip() or None, store_url.strip() or None, now(), game_id))
         grades.set_grade(conn, game_id, user["id"], grade or None, minutes, keep_flag)
         settle_credit(conn, game_id, user["id"],
@@ -1114,6 +1120,12 @@ def admin_page(request: Request, user=Depends(require_admin)):
             " FROM sections s ORDER BY s.position, s.name")]
         seats = {r["grade_seat"]: r["id"] for r in conn.execute(
             "SELECT id, grade_seat FROM users WHERE grade_seat IN (1, 2)")}
+        checked = [dict(r) for r in conn.execute(
+            "SELECT g.id, g.title, g.verified_at, g.broken, g.repack, g.status,"
+            " u.username AS verifier FROM games g"
+            " LEFT JOIN users u ON u.id = g.verified_by"
+            " WHERE g.verified = 1 AND g.verified_at IS NOT NULL"
+            " ORDER BY g.verified_at DESC, g.id DESC LIMIT 50")]
         settings = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings")}
         events = [dict(r) for r in slots.recent_events(conn, 20)]
         no_cover = conn.execute(
@@ -1126,7 +1138,7 @@ def admin_page(request: Request, user=Depends(require_admin)):
     return render(request, "admin.html", user=user, users=users, settings=settings,
                   events=events, exports=exports, no_cover=no_cover,
                   guest=dict(guest) if guest else None,
-                  section_rows=section_rows, seats=seats,
+                  section_rows=section_rows, seats=seats, checked=checked,
                   igdb=metadata.igdb_available(), job=jobs.status())
 
 

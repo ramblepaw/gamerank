@@ -287,6 +287,30 @@
       </ul>
     </div>
 
+    <h2>Last 50 checked</h2>
+    <div class="card grain">
+      {% if checked %}
+      <div class="tablewrap" style="max-height:420px;overflow-y:auto">
+        <table>
+          <thead><tr><th>Game</th><th>Result</th><th>Repack</th><th>By</th><th>When</th></tr></thead>
+          <tbody>
+          {% for g in checked %}
+          <tr>
+            <td><a href="/game/{{ g.id }}">{{ g.title }}</a>
+              {% if g.status == 'removed' %}<span class="tag warn">removed</span>{% endif %}</td>
+            <td>{% if g.broken %}<span class="mark broken">&minus;</span>
+                {% else %}<span class="mark ok">&#10003;</span>{% endif %}</td>
+            <td style="color:var(--dim)">{{ g.repack | capitalize if g.repack else '' }}</td>
+            <td style="color:var(--dim)">{{ g.verifier or '' }}</td>
+            <td style="color:var(--dim)">{{ g.verified_at[:10] }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<p class="sub" style="margin:0">Nothing checked yet.</p>{% endif %}
+    </div>
+
     <h2>Slot ledger</h2>
     <div class="card log">
       {% if events %}

@@ -28,6 +28,20 @@
     </div>
 
     <div style="margin-top:12px">
+      <label class="lbl">Repack</label>
+      <div class="seg" role="radiogroup" aria-label="Repack">
+        <input type="radio" name="repack" id="rp0-{{ g.id }}" value=""
+               {{ 'checked' if not g.repack }}>
+        <label for="rp0-{{ g.id }}">None</label>
+        {% for key, label in repacks %}
+        <input type="radio" name="repack" id="rp{{ key }}-{{ g.id }}" value="{{ key }}"
+               {{ 'checked' if g.repack == key }}>
+        <label for="rp{{ key }}-{{ g.id }}">{{ label }}</label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
       <label class="lbl" for="n-{{ g.id }}">Notes</label>
       <textarea name="notes" id="n-{{ g.id }}" style="min-height:56px">{{ g.notes or '' }}</textarea>
     </div>

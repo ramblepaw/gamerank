@@ -137,6 +137,9 @@
           <div class="lbl">Section</div>{{ g.section or '—' }}
         </div>
         <div class="grow">
+          <div class="lbl">Repack</div>{{ g.repack | capitalize if g.repack else '—' }}
+        </div>
+        <div class="grow">
           <div class="lbl">Version</div>{{ g.version or '—' }}
         </div>
       </div>
@@ -252,6 +255,15 @@
             {% if g.section and g.section not in sections %}
             <option value="{{ g.section }}" selected>{{ g.section }}</option>
             {% endif %}
+          </select>
+        </div>
+        <div class="grow">
+          <label class="lbl" for="repack">Repack</label>
+          <select name="repack" id="repack">
+            <option value="">none</option>
+            {% for key, label in repacks %}
+            <option value="{{ key }}" {{ 'selected' if g.repack == key }}>{{ label }}</option>
+            {% endfor %}
           </select>
         </div>
         <div class="grow">
