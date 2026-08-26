@@ -28,8 +28,9 @@
     <div class="l">broken</div>
   </div>
   <div>
-    <div class="n">{{ removal_ready }}</div>
-    <div class="l">removal candidates</div>
+    <div class="n">{{ slated_total }}</div>
+    <div class="l">slated</div>
+    {% if slated_total and not user.is_guest %}<div class="hint"><a href="/removal">the batch</a></div>{% endif %}
   </div>
   <div>
     <div class="n">{{ removed_total }}</div>
@@ -53,7 +54,7 @@
   </div>
 
   <div>
-    <h2>Grades</h2>
+    <h2>Your grades</h2>
     <div class="card grain">
       {% set total_graded = grade_dist.values() | sum %}
       {% if total_graded %}

@@ -13,7 +13,15 @@
 <div class="tile">
   <div class="art">
     <a class="artlink" href="/game/{{ g.id }}" aria-label="{{ g.title }}">{{ art(g) }}</a>
-    {% if g.grade %}<span class="corner grade-letter g-{{ g.grade }}">{{ g.grade }}</span>{% endif %}
+    {# One corner each: yours on the side your column sits on. A grade you are
+       not allowed to see leaves its corner empty rather than showing a marker,
+       since "they have graded this" is most of the anchor. #}
+    {% for sg in (g.seats or []) %}
+      {% if sg.grade %}
+      <span class="corner seat{{ sg.seat }} grade-letter g-{{ sg.grade }}"
+            title="{{ sg.username }}">{{ sg.grade }}</span>
+      {% endif %}
+    {% endfor %}
     <span class="flagrow">
       {% if not g.verified %}<span class="tag dim">unchecked</span>{% endif %}
       {% if g.broken %}<span class="tag no">broken</span>{% endif %}

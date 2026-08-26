@@ -312,6 +312,21 @@ h2 {
               box-shadow .24s ease, border-color .2s ease;
 }
 .tile .art img { width: 100%; height: 100%; object-fit: fill; transition: transform .5s ease; }
+/* One grade corner per grader: seat 1 top-left, seat 2 top-right. */
+.tile .corner.seat1 { left: 0; right: auto; border-bottom-right-radius: 5px; }
+.tile .corner.seat2 { right: 0; left: auto; border-bottom-left-radius: 5px; }
+.tile .corner.seat1, .tile .corner.seat2 { box-shadow: inset 0 -2px 0 var(--seat); }
+.tile .corner.seat1 { --seat: #4c7fd6; }
+.tile .corner.seat2 { --seat: #9b6bd6; }
+
+/* In tables the pair sits side by side, underlined in each grader's colour. */
+.grade-letter.seat1, .grade-letter.seat2 {
+  border-bottom: 2px solid var(--seat); margin-right: 4px;
+}
+.grade-letter.seat1 { --seat: #4c7fd6; }
+.grade-letter.seat2 { --seat: #9b6bd6; }
+.gradeblank { color: var(--dim); opacity: .45; margin-right: 4px; display: inline-block; min-width: 12px; }
+
 .tile .art::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(to top, rgba(0, 0, 0, .55), transparent 42%);

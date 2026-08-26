@@ -40,16 +40,6 @@ templates = Jinja2Templates(directory=os.path.join(BASE, "templates"))
 
 # Everything the removal list treats as a candidate. One definition so the
 # count on the dashboard and the rows on the page can't drift apart.
-REMOVAL_SQL = (
-    "status = 'active' AND (keep_flag = 'remove' OR grade IN ('C', 'D')"
-    " OR broken_status = 'unfixable')"
-)
-REMOVAL_SQL_G = (
-    "g.status = 'active' AND (g.keep_flag = 'remove' OR g.grade IN ('C', 'D')"
-    " OR g.broken_status = 'unfixable')"
-)
-
-
 RAIL_LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + ["#"]
 
 
@@ -237,22 +227,29 @@ def logout():
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, user=Depends(require_user)):
     with db() as conn:
+        # Your own grades. A library-wide tally would count the other
+        # person's letters, which is the thing being kept back.
         grade_dist = {r["grade"]: r["n"] for r in conn.execute(
-            "SELECT grade, COUNT(*) AS n FROM games WHERE grade IS NOT NULL"
-            " AND status = 'active' GROUP BY grade")}
+            "SELECT gg.grade, COUNT(*) AS n FROM game_grades gg"
+            " JOIN games g ON g.id = gg.game_id"
+            " WHERE gg.user_id = ? AND gg.grade IS NOT NULL AND g.status = 'active'"
+            " GROUP BY gg.grade", (user["id"],))}
         ungraded = conn.execute(
-            "SELECT COUNT(*) AS n FROM games WHERE verified = 1 AND grade IS NULL"
-            " AND status = 'active'").fetchone()["n"]
-        removal_ready = conn.execute(
-            "SELECT COUNT(*) AS n FROM games WHERE " + REMOVAL_SQL).fetchone()["n"]
+            "SELECT COUNT(*) AS n FROM games g WHERE g.verified = 1 AND g.status = 'active'"
+            " AND NOT EXISTS (SELECT 1 FROM game_grades gg"
+            " WHERE gg.game_id = g.id AND gg.user_id = ?)", (user["id"],)).fetchone()["n"]
+        slated_total = conn.execute(
+            "SELECT COUNT(*) AS n FROM games WHERE status = 'active'"
+            " AND slated_at IS NOT NULL").fetchone()["n"]
         removed_total = conn.execute(
             "SELECT COUNT(*) AS n FROM games WHERE status = 'removed'").fetchone()["n"]
         wishlist = conn.execute("SELECT COUNT(*) AS n FROM wishlist").fetchone()["n"]
         recent = [dict(r) for r in conn.execute(
             "SELECT *, date_added AS touched FROM games WHERE status = 'active'"
             " ORDER BY COALESCE(date_added, '') DESC, id DESC LIMIT 12")]
+        grades.attach(conn, recent, user)
     return render(request, "dashboard.html", user=user, grade_dist=grade_dist,
-                  ungraded=ungraded, removal_ready=removal_ready, removed_total=removed_total,
+                  ungraded=ungraded, slated_total=slated_total, removed_total=removed_total,
                   wishlist=wishlist, recent=recent, grades=GRADES)
 
 
@@ -359,11 +356,16 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
     if verified in ("0", "1"):
         where.append("g.verified = ?")
         params.append(int(verified))
+    # Grade filters read your own row. Filtering on the rolled-up column would
+    # hand back the other person's letters a search at a time.
     if grade == "none":
-        where.append("g.grade IS NULL")
+        where.append("NOT EXISTS (SELECT 1 FROM game_grades gg WHERE gg.game_id = g.id"
+                     " AND gg.user_id = ? AND gg.grade IS NOT NULL)")
+        params.append(user["id"])
     elif grade in GRADES:
-        where.append("g.grade = ?")
-        params.append(grade)
+        where.append("EXISTS (SELECT 1 FROM game_grades gg WHERE gg.game_id = g.id"
+                     " AND gg.user_id = ? AND gg.grade = ?)")
+        params.extend([user["id"], grade])
     if keep in ("keep", "remove"):
         where.append("g.keep_flag = ?")
         params.append(keep)
@@ -380,8 +382,10 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
         "title": "g.title_sort",
         "added": "COALESCE(g.date_added, '') DESC, g.id DESC",
         "updated": "g.last_updated DESC",
-        "grade": "CASE g.grade WHEN 'S' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2"
-                 " WHEN 'C' THEN 3 WHEN 'D' THEN 4 ELSE 5 END, g.title_sort",
+        "grade": "CASE (SELECT gg.grade FROM game_grades gg WHERE gg.game_id = g.id"
+                 " AND gg.user_id = %d) WHEN 'S' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2"
+                 " WHEN 'C' THEN 3 WHEN 'D' THEN 4 ELSE 5 END, g.title_sort"
+                 % int(user["id"]),
         "playtime": "COALESCE(g.playtime_minutes, -1) ASC, g.title_sort",
     }
     order = sorts.get(sort, sorts["title"])
@@ -416,12 +420,13 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
             " LEFT JOIN users u ON u.id = g.graded_by" + clause +
             " ORDER BY " + order + " LIMIT ? OFFSET ?", (*params, per, (page - 1) * per))]
         sections = section_names(conn)
+        grades.attach(conn, rows, user)
 
     if partial:
         # Only the repeatable rows, for the infinite scroller to append.
         return templates.TemplateResponse(
             "_library_items.html",
-            {"request": request, "games": rows, "view": view})
+            {"request": request, "games": rows, "view": view, "user": user})
 
     # Remember what was being looked at, so coming back from a game page or the
     # nav resumes it rather than resetting to everything.
@@ -446,6 +451,7 @@ def recent(request: Request, n: int = 50, user=Depends(require_user)):
             " FROM games g LEFT JOIN users u ON u.id = g.graded_by"
             " WHERE g.status = 'active'"
             " ORDER BY COALESCE(g.date_added, '') DESC, g.id DESC LIMIT ?", (n,))]
+        grades.attach(conn, rows, user)
     return render(request, "recent.html", user=user, games=rows, n=n,
                   fallback_date=FALLBACK_DATE)
 
@@ -462,7 +468,7 @@ def game_detail(request: Request, game_id: int, err: str = "", user=Depends(requ
         history = [dict(r) for r in conn.execute(
             "SELECT a.*, u.username AS display_name FROM audit a LEFT JOIN users u ON u.id = a.user_id"
             " WHERE a.game_id = ? ORDER BY a.id DESC LIMIT 30", (game_id,))]
-        panels = grades.panels(conn, game_id, user["id"])
+        panels = grades.panels(conn, game_id, user)
         mine = grades.for_game(conn, game_id).get(user["id"])
         sections = section_names(conn)
     return render(request, "game.html", user=user, g=dict(row), history=history, err=err,
@@ -781,23 +787,29 @@ def broken_update(request: Request, game_id: int, broken_status: str = Form(...)
 # ------------------------------------------------------------------------ removal
 
 @app.get("/removal", response_class=HTMLResponse)
-def removal(request: Request, user=Depends(require_user)):
+def removal(request: Request, q: str = "", user=Depends(require_user)):
+    """The batch about to be deleted, plus a search for adding to it.
+
+    There is no candidate list any more. Naming candidates meant naming the
+    games the other person had graded C or below, which is the letter that is
+    meant to stay out of sight until you have graded the game yourself.
+    """
+    found = []
     with db() as conn:
-        rows = [dict(r) for r in conn.execute(
-            "SELECT g.*, u.username AS grader FROM games g"
-            " LEFT JOIN users u ON u.id = g.graded_by WHERE " + REMOVAL_SQL_G +
-            " AND g.slated_at IS NULL"
-            " ORDER BY CASE WHEN g.broken_status = 'unfixable' THEN 0"
-            " WHEN g.keep_flag = 'remove' THEN 1 WHEN g.grade = 'D' THEN 2 ELSE 3 END,"
-            " COALESCE(g.playtime_minutes, 0) ASC, g.title COLLATE NOCASE")]
         slated = [dict(r) for r in conn.execute(
-            "SELECT g.*, u.username AS grader FROM games g"
-            " LEFT JOIN users u ON u.id = g.graded_by"
-            " WHERE g.slated_at IS NOT NULL AND g.status = 'active'"
-            " ORDER BY g.slated_at, g.title COLLATE NOCASE")]
+            "SELECT g.* FROM games g WHERE g.slated_at IS NOT NULL AND g.status = 'active'"
+            " ORDER BY g.slated_at, g.title_sort")]
+        if q.strip():
+            found = [dict(r) for r in conn.execute(
+                "SELECT g.* FROM games g WHERE g.status = 'active' AND g.slated_at IS NULL"
+                " AND g.title_norm LIKE ? ORDER BY g.title_sort LIMIT 60",
+                ("%" + norm_title(q) + "%",))]
         total = conn.execute(
             "SELECT COUNT(*) AS n FROM games WHERE status = 'active'").fetchone()["n"]
-    return render(request, "removal.html", user=user, games=rows, slated=slated, total=total)
+        grades.attach(conn, slated, user)
+        grades.attach(conn, found, user)
+    return render(request, "removal.html", user=user, slated=slated, found=found,
+                  q=q, total=total)
 
 
 # ----------------------------------------------------------------------- add/paste
@@ -1352,12 +1364,9 @@ def export_text(request: Request, fmt: str = "markdown", scope: str = "recent",
         sql = ("SELECT * FROM games WHERE slated_at IS NOT NULL AND status = 'active'"
                " ORDER BY title_sort LIMIT ?")
         params = (n,)
-    elif scope == "removal":
-        sql = "SELECT * FROM games WHERE " + REMOVAL_SQL + " ORDER BY title COLLATE NOCASE LIMIT ?"
-        params = (n,)
     else:
         sql = ("SELECT * FROM games WHERE status = 'active'"
-               " ORDER BY title COLLATE NOCASE LIMIT ?")
+               " ORDER BY title_sort LIMIT ?")
         params = (n,)
 
     with db() as conn:

@@ -34,13 +34,19 @@
 
 <div class="tablewrap" style="margin-bottom:26px">
 <table>
-  <thead><tr><th></th><th>Title</th><th>Grade</th><th>Played</th><th>Slated</th><th></th></tr></thead>
+  <thead><tr><th></th><th>Title</th><th>Grades</th><th>Played</th><th>Slated</th><th></th></tr></thead>
   <tbody>
   {% for g in slated %}
     <tr>
       {{ thumb(g) }}
       <td><a href="/game/{{ g.id }}">{{ g.title }}</a> {{ steamlink(g) }}</td>
-      <td>{% if g.grade %}<span class="grade-letter g-{{ g.grade }}">{{ g.grade }}</span>{% else %}&mdash;{% endif %}</td>
+      <td style="white-space:nowrap">
+        {%- for sg in (g.seats or []) -%}
+          {% if sg.grade %}<span class="grade-letter g-{{ sg.grade }} seat{{ sg.seat }}"
+             title="{{ sg.username }}">{{ sg.grade }}</span>
+          {% else %}<span class="gradeblank">&middot;</span>{% endif %}
+        {%- endfor -%}
+      </td>
       <td>{{ g.playtime_minutes ~ 'm' if g.playtime_minutes is not none else '—' }}</td>
       <td style="color:var(--dim)">{{ g.slated_at[:10] if g.slated_at }}</td>
       <td><form method="post" action="/game/{{ g.id }}/unslate">
@@ -52,29 +58,39 @@
 </div>
 {% endif %}
 
-<h2>Candidates</h2>
+<h2>Find a game to slate</h2>
 <p class="sub">
-  Low grades, remove flags and unfixable entries, worst first. Playtime is shown because a
-  D with three hours on it means something different from a D with ten minutes.
+  Search the library and add what you want gone to the batch. There is no
+  candidate list: it would have named the games the other person graded low,
+  and a grade stays theirs until you have graded it too.
 </p>
 
-{% if not games %}
-  <div class="empty">No candidates.{% if slated %} Everything flagged is already slated.{% endif %}</div>
-{% else %}
+<form class="filters" method="get" action="/removal">
+  <div class="wide"><label class="lbl" for="q">Search</label>
+    <input type="search" name="q" id="q" value="{{ q }}" placeholder="Title..." autofocus></div>
+  <div><button class="primary" type="submit">Search</button></div>
+</form>
+
+{% if q and not found %}
+  <div class="empty">Nothing on the server matches &ldquo;{{ q }}&rdquo;.</div>
+{% elif found %}
 <div class="tablewrap">
 <table>
-  <thead><tr><th></th><th>Title</th><th>Why</th><th>Grade</th><th>Played</th><th>By</th><th class="wrap">Notes</th><th></th></tr></thead>
+  <thead><tr><th></th><th>Title</th><th>Grades</th><th>Played</th><th>Section</th><th class="wrap">Notes</th><th></th></tr></thead>
   <tbody>
-  {% for g in games %}
+  {% for g in found %}
     <tr>
       {{ thumb(g) }}
       <td><a href="/game/{{ g.id }}">{{ g.title }}</a> {{ steamlink(g) }}</td>
-      <td>{% if g.broken_status == 'unfixable' %}<span class="tag no">unfixable</span>
-          {% elif g.keep_flag == 'remove' %}<span class="tag no">flagged</span>
-          {% else %}<span class="tag warn">grade</span>{% endif %}</td>
-      <td>{% if g.grade %}<span class="grade-letter g-{{ g.grade }}">{{ g.grade }}</span>{% else %}&mdash;{% endif %}</td>
+      <td style="white-space:nowrap">
+        {%- for sg in (g.seats or []) -%}
+          {% if sg.grade %}<span class="grade-letter g-{{ sg.grade }} seat{{ sg.seat }}"
+             title="{{ sg.username }}">{{ sg.grade }}</span>
+          {% else %}<span class="gradeblank">&middot;</span>{% endif %}
+        {%- endfor -%}
+      </td>
       <td>{{ g.playtime_minutes ~ 'm' if g.playtime_minutes is not none else '—' }}</td>
-      <td style="color:var(--dim)">{{ g.grader or '—' }}</td>
+      <td style="color:var(--dim)">{{ g.section or '—' }}</td>
       <td class="wrap" style="color:var(--dim);max-width:260px">{{ g.notes or '' }}</td>
       <td><form method="post" action="/game/{{ g.id }}/slate">
             <button class="bad sm" type="submit">Slate</button></form></td>

@@ -73,20 +73,72 @@ def seats(conn) -> list:
         " WHERE grade_seat IN (1, 2) ORDER BY grade_seat")]
 
 
-def panels(conn, game_id: int, viewer_id: int = None) -> list:
-    """One entry per grade column, in display order, for the game page."""
+def open_book(viewer) -> bool:
+    """Whether this account sees grades it did not set.
+
+    The viewing account grades nothing, and exists so people can look a game up
+    before suggesting it again - blind grading would leave it with nothing to
+    read. Anyone who can grade plays blind.
+    """
+    return bool(viewer and viewer.get("is_guest"))
+
+
+def panels(conn, game_id: int, viewer=None) -> list:
+    """One entry per grade column, in display order, for the game page.
+
+    You always see your own. The other person's stays hidden until you have
+    graded the game yourself, so their letter cannot anchor yours. Nothing
+    stands in for a hidden grade: a placeholder would still say "they have
+    graded this", which is most of the anchor.
+    """
+    viewer_id = (viewer or {}).get("id")
     held = for_game(conn, game_id)
+    revealed = open_book(viewer) or viewer_id in held
     out = []
     for seat in seats(conn):
-        row = held.get(seat["id"])
+        mine = seat["id"] == viewer_id
+        row = held.get(seat["id"]) if (mine or revealed) else None
         out.append({
             "seat": seat["grade_seat"],
             "user_id": seat["id"],
             "username": seat["username"],
-            "mine": seat["id"] == viewer_id,
+            "mine": mine,
+            "hidden": not (mine or revealed),
             "grade": row["grade"] if row else None,
             "playtime_minutes": row["playtime_minutes"] if row else None,
             "keep_flag": row["keep_flag"] if row else None,
             "graded_at": row["updated_at"] if row else None,
         })
     return out
+
+
+def attach(conn, rows, viewer) -> None:
+    """Hang the visible per-seat grades on each row of a listing, in place.
+
+    Same rule as panels(): your own always, the other person's only once you
+    have graded that game too.
+    """
+    if not rows:
+        return
+    viewer_id = (viewer or {}).get("id")
+    everything = open_book(viewer)
+    seat_list = seats(conn)
+    ids = [r["id"] for r in rows]
+
+    held = {}
+    for start in range(0, len(ids), 400):        # keep well inside SQLite's limit
+        block = ids[start:start + 400]
+        for r in conn.execute(
+                "SELECT game_id, user_id, grade FROM game_grades WHERE game_id IN (%s)"
+                % ",".join("?" for _ in block), block):
+            held.setdefault(r["game_id"], {})[r["user_id"]] = r["grade"]
+
+    for row in rows:
+        on_game = held.get(row["id"], {})
+        revealed = everything or viewer_id in on_game
+        row["seats"] = [
+            {"seat": s["grade_seat"], "username": s["username"],
+             "mine": s["id"] == viewer_id,
+             "grade": on_game.get(s["id"]) if (revealed or s["id"] == viewer_id) else None}
+            for s in seat_list
+        ]
