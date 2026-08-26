@@ -194,6 +194,10 @@
           <label class="lbl" for="date_added">Date added</label>
           <input type="date" name="date_added" id="date_added" value="{{ g.date_added or '' }}">
         </div>
+        <div class="grow">
+          <label class="lbl" for="last_updated">Date updated</label>
+          <input type="date" name="last_updated" id="last_updated" value="{{ g.last_updated or '' }}">
+        </div>
         {% if g.status == 'removed' %}
         <div class="grow">
           <label class="lbl" for="removed_at">Date removed</label>

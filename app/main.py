@@ -531,6 +531,7 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
                 keep_flag: str = Form(""), notes: str = Form(""),
                 works: str = Form("yes"), version: str = Form(""),
                 repack: str = Form(""), removed_at: str = Form(""),
+                last_updated: str = Form(""),
                 section: str = Form(""), date_added: str = Form(""),
                 steam_appid: str = Form(""), cover_url: str = Form(""),
                 store_url: str = Form(""), user=Depends(require_user)):
@@ -550,8 +551,8 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
         store_url = metadata.steam_store_url(appid)
 
     with db() as conn:
-        was = conn.execute("SELECT verified, broken, status, removed_at FROM games"
-                           " WHERE id = ?", (game_id,)).fetchone()
+        was = conn.execute("SELECT verified, broken, status, removed_at, last_updated"
+                           " FROM games WHERE id = ?", (game_id,)).fetchone()
         if not was:
             raise HTTPException(404, "No such game.")
 
@@ -572,11 +573,14 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
 
         conn.execute(
             "UPDATE games SET title = ?, title_norm = ?, title_sort = ?, section = ?,"
-            " date_added = ?, verified = ?, notes = ?, broken = ?, repack = ?,"
+            " date_added = ?, last_updated = ?, verified = ?, notes = ?, broken = ?, repack = ?,"
             " version = ?, steam_appid = ?, cover_url = ?, store_url = ?, removed_at = ?,"
             " updated_at = ? WHERE id = ?",
             (title.strip(), norm_title(title), sort_title(title), section.strip() or None,
-             date_added.strip() or FALLBACK_DATE, is_verified, notes.strip() or None,
+             date_added.strip() or FALLBACK_DATE,
+             # Saving the page is not an update, so this only moves when the
+             # field itself is changed.
+             last_updated.strip() or None, is_verified, notes.strip() or None,
              is_broken, repack if repack in REPACK_KEYS else None,
              version.strip() or None, appid,
              cover_url.strip() or None, store_url.strip() or None, gone_on,
