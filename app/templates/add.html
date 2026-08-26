@@ -3,24 +3,32 @@
 {% block title %}Add &middot; GameRank{% endblock %}
 {% block body %}
 
-<h1>{{ 'Updated games' if mode == 'update' else 'Add games' }}</h1>
+{% set titles = {'add': 'Add games', 'update': 'Updated games', 'archive': 'Already removed'} %}
+<h1>{{ titles.get(mode, 'Add games') }}</h1>
 <p class="sub">
   {% if mode == 'update' %}
     Paste a batch of updates. Every title already in the library goes back to
     unverified and costs a slot.
+    {{ slots.balance }} slots free.
+  {% elif mode == 'archive' %}
+    For games that were gone before any of this existed. They land straight in
+    the removed archive &mdash; nothing to check, no slot spent. A title already
+    in the library is left alone.
   {% else %}
-    Paste a batch of new games.
+    Paste a batch of new games. {{ slots.balance }} slots free.
   {% endif %}
-  {{ slots.balance }} slots free.
 </p>
 
 <div class="seg" style="margin-bottom:18px">
-  <input type="radio" name="modepick" id="mode-add" {{ 'checked' if mode != 'update' }}
+  <input type="radio" name="modepick" id="mode-add" {{ 'checked' if mode == 'add' }}
          onchange="location.href='/add'" style="width:auto">
   <label for="mode-add">New games</label>
   <input type="radio" name="modepick" id="mode-upd" {{ 'checked' if mode == 'update' }}
          onchange="location.href='/add?mode=update'" style="width:auto">
   <label for="mode-upd">Updates</label>
+  <input type="radio" name="modepick" id="mode-arc" {{ 'checked' if mode == 'archive' }}
+         onchange="location.href='/add?mode=archive'" style="width:auto">
+  <label for="mode-arc">Already removed</label>
 </div>
 
 {% if result %}
@@ -147,6 +155,14 @@
         </tbody>
       </table>
     </div>
+    {% if mode == 'archive' %}
+    <p class="sub">
+      {{ new_count }} to archive, no slots spent.
+      {% if parsed | length > new_count %}
+        {{ (parsed | length) - new_count }} already in the library and left alone.
+      {% endif %}
+    </p>
+    {% else %}
     <p class="sub" id="tally"
        data-base="{{ (exact_count if mode == 'update' else new_count) }}"
        data-balance="{{ slots.balance }}">
@@ -154,6 +170,7 @@
       costs {{ exact_count if mode == 'update' else new_count }} slots. You have {{ slots.balance }}.
       {% if near_count %}{{ near_count }} need{{ 's' if near_count == 1 else '' }} a decision above.{% endif %}
     </p>
+    {% endif %}
     <div class="row">
       <label style="display:flex;gap:7px;align-items:center;color:var(--dim)">
         <input type="checkbox" name="fetch" value="1" checked style="width:auto"> fetch art and store links
@@ -167,6 +184,7 @@
 // count both or the "short by" warning would be wrong.
 function recount() {
   var tally = document.getElementById('tally');
+  if (!tally) return;              // archive mode spends nothing to count
   var base = parseInt(tally.dataset.base, 10);
   var balance = parseInt(tally.dataset.balance, 10);
   var updates = document.querySelectorAll('input.isupdate:checked').length;

@@ -896,10 +896,13 @@ def removal(request: Request, q: str = "", user=Depends(require_user)):
 
 # ----------------------------------------------------------------------- add/paste
 
+ADD_MODES = ("add", "update", "archive")
+
+
 @app.get("/add", response_class=HTMLResponse)
 def add_form(request: Request, mode: str = "add", user=Depends(require_user)):
     return render(request, "add.html", user=user, parsed=None, result=None,
-                  mode="update" if mode == "update" else "add")
+                  mode=mode if mode in ADD_MODES else "add")
 
 
 @app.post("/add/preview", response_class=HTMLResponse)
@@ -962,6 +965,9 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
 
             if found["kind"] == "exact":
                 gid = found["game"]["id"]
+                if mode == "archive":
+                    skipped.append(item["title"])
+                    continue
                 if item["steam_appid"] or item["url"]:
                     link_to(conn, gid, item)
                 # In update mode every title already present is a new build,
@@ -974,6 +980,9 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
                 continue
 
             if found["kind"] == "near":
+                if mode == "archive":
+                    skipped.append(item["title"])
+                    continue
                 # Nothing happens to a near match unless it was confirmed on
                 # the preview screen.
                 if decision.startswith("update:"):
@@ -995,17 +1004,26 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
             if mode == "update":
                 skipped.append(item["title"])
                 continue
+
             appid = item["steam_appid"]
+            # Archive mode records games that were gone before the app existed.
+            # They arrive already removed, so there is nothing to check and no
+            # slot to spend - they never joined the pile of work.
+            gone = mode == "archive"
             cur = conn.execute(
                 "INSERT INTO games (title, title_norm, title_sort, section, date_added, verified,"
-                " steam_appid, store_url, cover_url, created_at, updated_at)"
-                " VALUES (?, ?, ?, 'Recently Added', ?, 0, ?, ?, ?, ?, ?)",
+                " status, removed_at, steam_appid, store_url, cover_url, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)",
                 (item["title"], norm_title(item["title"]), sort_title(item["title"]),
-                 today(), appid,
+                 None if gone else "Recently Added", today(),
+                 "removed" if gone else "active", now() if gone else None, appid,
                  metadata.steam_store_url(appid) if appid else (item["url"] or None),
                  None, now(), now()))
-            slots.spend(conn, cur.lastrowid, user["id"], "added")
-            log_audit(conn, cur.lastrowid, user["id"], "added", "from paste")
+            if gone:
+                log_audit(conn, cur.lastrowid, user["id"], "archived", "already removed")
+            else:
+                slots.spend(conn, cur.lastrowid, user["id"], "added")
+                log_audit(conn, cur.lastrowid, user["id"], "added", "from paste")
             added.append({"id": cur.lastrowid, "title": item["title"], "appid": appid})
 
     if fetch == "1":
