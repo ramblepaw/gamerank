@@ -10,9 +10,28 @@ from .db import db, now, get_setting_conn
 VERIFY = "verify"
 GRADE = "grade"
 
-POOL_SQL = {
-    VERIFY: "SELECT id FROM games WHERE verified = 0 AND status = 'active'",
-    GRADE: "SELECT id FROM games WHERE verified = 1 AND grade IS NULL AND status = 'active'",
+def pool(queue: str, user_id: int):
+    """(sql, params) for every game this user could still be served.
+
+    Grading is per person, so the grade pool is what *you* have not graded -
+    a game your partner has already graded is still yours to weigh in on.
+    """
+    if queue == VERIFY:
+        return "SELECT g.id FROM games g WHERE g.verified = 0 AND g.status = 'active'", ()
+    return (
+        "SELECT g.id FROM games g WHERE g.verified = 1 AND g.status = 'active'"
+        " AND NOT EXISTS (SELECT 1 FROM game_grades gg"
+        " WHERE gg.game_id = g.id AND gg.user_id = ?)",
+        (user_id,),
+    )
+
+
+# Order the random draw. Games already carrying someone's grade come first, so
+# second opinions land before the never-touched backlog.
+DRAW_ORDER = {
+    VERIFY: " ORDER BY RANDOM()",
+    GRADE: " ORDER BY EXISTS (SELECT 1 FROM game_grades x WHERE x.game_id = g.id) DESC,"
+           " RANDOM()",
 }
 
 
@@ -28,10 +47,9 @@ def _held_elsewhere(conn, user_id: int, queue: str):
     return {r["game_id"] for r in rows}
 
 
-def pool_count(conn, queue: str) -> int:
-    return conn.execute(
-        f"SELECT COUNT(*) AS n FROM ({POOL_SQL[queue]})"
-    ).fetchone()["n"]
+def pool_count(conn, queue: str, user_id: int) -> int:
+    sql, params = pool(queue, user_id)
+    return conn.execute("SELECT COUNT(*) AS n FROM (%s)" % sql, params).fetchone()["n"]
 
 
 def refill(conn, user_id: int, queue: str) -> None:
@@ -54,7 +72,8 @@ def refill(conn, user_id: int, queue: str) -> None:
     held = [gid for _, gid in current if gid is not None]
 
     # Drop anything that no longer belongs in this queue (resolved elsewhere).
-    valid = {r["id"] for r in conn.execute(POOL_SQL[queue])}
+    pool_sql, pool_params = pool(queue, user_id)
+    valid = {r["id"] for r in conn.execute(pool_sql, pool_params)}
     kept, seen = [], set()
     for gid in held:
         if gid in valid and gid not in seen:
@@ -64,11 +83,12 @@ def refill(conn, user_id: int, queue: str) -> None:
 
     if len(kept) < size:
         taken = set(kept) | _held_elsewhere(conn, user_id, queue)
-        sql = POOL_SQL[queue]
+        sql = pool_sql
         if taken:
-            sql += " AND id NOT IN (%s)" % ",".join("?" for _ in taken)
-        sql += " ORDER BY RANDOM() LIMIT ?"
-        kept += [r["id"] for r in conn.execute(sql, (*taken, size - len(kept)))]
+            sql += " AND g.id NOT IN (%s)" % ",".join("?" for _ in taken)
+        sql += DRAW_ORDER[queue] + " LIMIT ?"
+        kept += [r["id"] for r in conn.execute(
+            sql, (*pool_params, *taken, size - len(kept)))]
 
     wanted = list(enumerate(kept))
     if wanted == current:                    # every page view calls this

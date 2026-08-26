@@ -145,6 +145,90 @@
       </p>
     </form>
 
+    <h2>Categories</h2>
+    <div class="card grain">
+      <p class="sub" style="margin:0 0 12px">
+        The sections a game can belong to, in the order they appear in the CSV.
+        Renaming one moves every game in it; deleting one leaves the games and
+        just takes the label off.
+      </p>
+      {% if section_rows %}
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Name</th><th>Games</th><th></th></tr></thead>
+          <tbody>
+          {% for sec in section_rows %}
+          <tr>
+            <td>{{ sec.name }}</td>
+            <td>{{ sec.games }}</td>
+            <td style="white-space:nowrap">
+              <form method="post" action="/admin/sections" style="display:inline">
+                <input type="hidden" name="name" value="{{ sec.name }}">
+                <button class="sm" type="submit" name="action" value="up"
+                        {{ 'disabled' if loop.first }} title="Move up">&uarr;</button>
+                <button class="sm" type="submit" name="action" value="down"
+                        {{ 'disabled' if loop.last }} title="Move down">&darr;</button>
+              </form>
+              <form method="post" action="/admin/sections" style="display:inline"
+                    onsubmit="var n=prompt('Rename {{ sec.name }} to:', '{{ sec.name }}');
+                              if(!n) return false; this.rename.value=n; return true;">
+                <input type="hidden" name="name" value="{{ sec.name }}">
+                <input type="hidden" name="rename" value="">
+                <button class="sm" type="submit" name="action" value="rename">Rename</button>
+              </form>
+              <form method="post" action="/admin/sections" style="display:inline"
+                    onsubmit="return confirm('Delete the category {{ sec.name }}? Its {{ sec.games }} games stay, without a category.')">
+                <input type="hidden" name="name" value="{{ sec.name }}">
+                <button class="sm bad" type="submit" name="action" value="delete">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<p class="sub" style="margin:0 0 12px">None yet.</p>{% endif %}
+      <form method="post" action="/admin/sections" style="margin-top:12px">
+        <div class="row">
+          <input class="grow" type="text" name="name" placeholder="New category" required>
+          <button class="primary" type="submit" name="action" value="add">Add</button>
+        </div>
+      </form>
+    </div>
+
+    <h2>Grade columns</h2>
+    <div class="card grain">
+      <p class="sub" style="margin:0 0 12px">
+        Both of you grade a game independently and neither overwrites the other.
+        The left column shows in blue, the right in purple, and a C or below from
+        either side makes a game a removal candidate.
+      </p>
+      <form method="post" action="/admin/seats">
+        <div class="row">
+          <div class="grow">
+            <label class="lbl" for="left">Left, blue</label>
+            <select name="left" id="left">
+              <option value="">&mdash;</option>
+              {% for u in users %}
+              <option value="{{ u.id }}" {{ 'selected' if seats.get(1) == u.id }}>{{ u.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="grow">
+            <label class="lbl" for="right">Right, purple</label>
+            <select name="right" id="right">
+              <option value="">&mdash;</option>
+              {% for u in users %}
+              <option value="{{ u.id }}" {{ 'selected' if seats.get(2) == u.id }}>{{ u.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+        <button class="primary" type="submit">Save</button>
+      </form>
+    </div>
+
     <h2>Viewing account</h2>
     <div class="card grain">
       <p class="sub" style="margin:0 0 12px">

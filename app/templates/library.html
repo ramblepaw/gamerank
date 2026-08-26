@@ -10,6 +10,7 @@
    kept for anyone without JS. #}
 <form class="filters" method="get" action="/library" id="filters">
   <input type="hidden" name="view" value="{{ f.view }}">
+  <input type="hidden" name="letter" value="{{ f.letter }}">
   <div class="wide"><label class="lbl" for="q">Search</label>
     <input type="search" name="q" id="q" value="{{ f.q }}" placeholder="Title..."></div>
   <div><label class="lbl" for="verified">Checked</label>
@@ -42,16 +43,33 @@
   <div><button class="primary" type="submit" id="applybtn">Apply</button></div>
 </form>
 
-{% set active = f.q or f.verified or f.grade or f.keep or f.section or f.sort != 'title' or f.status != 'active' %}
-{% set qs = 'q=' ~ f.q ~ '&verified=' ~ f.verified ~ '&grade=' ~ f.grade ~ '&keep=' ~ f.keep ~ '&section=' ~ f.section ~ '&status=' ~ f.status ~ '&sort=' ~ f.sort %}
+{% set active = f.q or f.verified or f.grade or f.keep or f.section or f.letter or f.sort != 'title' or f.status != 'active' %}
+{% set base = 'q=' ~ f.q ~ '&verified=' ~ f.verified ~ '&grade=' ~ f.grade ~ '&keep=' ~ f.keep ~ '&section=' ~ f.section ~ '&status=' ~ f.status ~ '&sort=' ~ f.sort %}
+{% set qs = base ~ '&letter=' ~ f.letter %}
 <p class="sub">
   <a href="/library?{{ qs }}&view={{ 'list' if view == 'grid' else 'grid' }}">{{ 'list view' if view == 'grid' else 'grid view' }}</a>
   &middot; <a href="/export.txt?scope=all&fmt=markdown&n=3000" target="_blank">text list</a>
   {% if active %}
-  &middot; <a href="/library?status=active&sort=title&view={{ view }}">clear filters</a>
+  &middot; <a href="/library?status=active&sort=title&letter=&view={{ view }}">clear filters</a>
   <span class="tag warn" style="margin-left:4px">filtered</span>
   {% endif %}
 </p>
+
+{# Jumping to a letter is a filter, not a scroll: the list is loaded a page at
+   a time, so the letter you want may not be on the page yet. #}
+{% set rail %}
+<nav class="rail" aria-label="Jump to letter">
+  <a href="/library?{{ base }}&view={{ view }}" class="{{ 'on' if not f.letter }}">All</a>
+  {% for L in letters %}
+    {% if rail_counts.get(L) %}
+      <a href="/library?{{ base }}&view={{ view }}&letter={{ L | urlencode }}"
+         class="{{ 'on' if f.letter == L }}" title="{{ rail_counts.get(L) }} games">{{ L }}</a>
+    {% else %}
+      <span class="off">{{ L }}</span>
+    {% endif %}
+  {% endfor %}
+</nav>
+{% endset %}
 
 {% if not games %}
   <div class="empty">
@@ -67,13 +85,19 @@
     {% endif %}
   </div>
 {% elif view == 'grid' %}
-  <div class="grid" id="results">{% include "_library_items.html" %}</div>
+  <div class="withrail">
+    {{ rail }}
+    <div class="grid" id="results">{% include "_library_items.html" %}</div>
+  </div>
 {% else %}
-  <div class="tablewrap">
-  <table>
-    <thead><tr><th></th><th>Title</th><th>Checked</th><th>Grade</th><th>Played</th><th>Keep</th><th>Added</th><th>Section</th></tr></thead>
-    <tbody id="results">{% include "_library_items.html" %}</tbody>
-  </table>
+  <div class="withrail">
+    {{ rail }}
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th></th><th>Title</th><th>Checked</th><th>Grade</th><th>Played</th><th>Keep</th><th>Added</th><th>Section</th></tr></thead>
+      <tbody id="results">{% include "_library_items.html" %}</tbody>
+    </table>
+    </div>
   </div>
 {% endif %}
 

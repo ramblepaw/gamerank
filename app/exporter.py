@@ -17,6 +17,16 @@ NEW_HEADER = [
 HEADER = BASE_HEADER + NEW_HEADER
 
 
+def grade_columns(conn) -> list:
+    """One column per grade seat, named after its account.
+
+    The plain Grade column keeps carrying the harsher of the two, so the sheet
+    reads the same way it always did and the removal rule can be checked off it.
+    """
+    return [(r["id"], "Grade: %s" % r["username"]) for r in conn.execute(
+        "SELECT id, username FROM users WHERE grade_seat IN (1, 2) ORDER BY grade_seat")]
+
+
 def _tf(value) -> str:
     return "TRUE" if value else "FALSE"
 
@@ -49,15 +59,21 @@ def build_rows() -> list:
         users = {r["id"]: r["username"] for r in conn.execute("SELECT id, username FROM users")}
         games = conn.execute("SELECT * FROM games ORDER BY COALESCE(section, ''), id").fetchall()
         order = _ordered_sections(conn)
+        seats = grade_columns(conn)
+        held = {}
+        for r in conn.execute("SELECT game_id, user_id, grade FROM game_grades"):
+            held.setdefault(r["game_id"], {})[r["user_id"]] = r["grade"] or ""
+
+    header = HEADER + [name for _, name in seats]
 
     by_section = {}
     for g in games:
         by_section.setdefault(g["section"], []).append(g)
 
-    rows = [HEADER]
+    rows = [header]
     for section in order:
         if section:
-            rows.append([section] + [""] * (len(HEADER) - 1))
+            rows.append([section] + [""] * (len(header) - 1))
         for g in by_section.get(section, []):
             rows.append([
                 g["title"], _tf(g["legacy_ea"]), _tf(g["legacy_own"]), _tf(g["legacy_portable"]),
@@ -67,7 +83,7 @@ def build_rows() -> list:
                 g["playtime_minutes"] if g["playtime_minutes"] is not None else "",
                 g["keep_flag"] or "", users.get(g["graded_by"], ""), users.get(g["verified_by"], ""),
                 g["broken_status"] or "", g["steam_appid"] or "", g["status"],
-            ])
+            ] + [held.get(g["id"], {}).get(uid, "") for uid, _ in seats])
     return rows
 
 

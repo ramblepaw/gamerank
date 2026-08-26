@@ -83,14 +83,30 @@
 
   <div>
     {% if user.is_guest %}
+    {# Both of you grade independently. Left column blue, right purple, fixed
+       per account so a grade is talked about the same way by both of you. #}
+    {% if panels %}
+    <div class="gradepair">
+      {% for p in panels %}
+      <div class="gradecard seat{{ p.seat }}{{ ' empty' if not p.grade }}">
+        <div class="who">{{ p.username }}{% if p.mine %} <span>you</span>{% endif %}</div>
+        {% if p.grade %}
+          <div class="letter grade-letter g-{{ p.grade }}">{{ p.grade }}</div>
+          <div class="meta">
+            {% if p.playtime_minutes is not none %}{{ p.playtime_minutes }} min{% else %}no playtime{% endif %}
+            {% if p.keep_flag %} &middot; {{ p.keep_flag }}{% endif %}
+          </div>
+        {% else %}
+          <div class="letter none">&mdash;</div>
+          <div class="meta">not graded</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
     {# Viewing account: the same facts, none of the controls. #}
     <div class="card grain">
       <div class="row">
-        <div class="grow">
-          <div class="lbl">Grade</div>
-          {% if g.grade %}<span class="grade-letter g-{{ g.grade }}">{{ g.grade }}</span>
-          {% else %}<span class="sub">ungraded</span>{% endif %}
-        </div>
         <div class="grow">
           <div class="lbl">Works</div>
           {% if not g.verified %}<span class="sub">not checked yet</span>
@@ -133,6 +149,27 @@
       Read only &mdash; grades and notes are set by the people running the server.
     </p>
     {% else %}
+    {# Both of you grade independently. Left column blue, right purple, fixed
+       per account so a grade is talked about the same way by both of you. #}
+    {% if panels %}
+    <div class="gradepair">
+      {% for p in panels %}
+      <div class="gradecard seat{{ p.seat }}{{ ' empty' if not p.grade }}">
+        <div class="who">{{ p.username }}{% if p.mine %} <span>you</span>{% endif %}</div>
+        {% if p.grade %}
+          <div class="letter grade-letter g-{{ p.grade }}">{{ p.grade }}</div>
+          <div class="meta">
+            {% if p.playtime_minutes is not none %}{{ p.playtime_minutes }} min{% else %}no playtime{% endif %}
+            {% if p.keep_flag %} &middot; {{ p.keep_flag }}{% endif %}
+          </div>
+        {% else %}
+          <div class="letter none">&mdash;</div>
+          <div class="meta">not graded</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
     <form class="card grain" method="post" action="/game/{{ g.id }}">
       <div class="row">
         <div class="grow" style="flex:3">
@@ -154,23 +191,23 @@
           </select>
         </div>
         <div class="grow">
-          <label class="lbl" for="grade">Grade</label>
+          <label class="lbl" for="grade">Your grade</label>
           <select name="grade" id="grade">
             <option value="">ungraded</option>
-            {% for l in grades %}<option value="{{ l }}" {{ 'selected' if g.grade == l }}>{{ l }}</option>{% endfor %}
+            {% for l in grades %}<option value="{{ l }}" {{ 'selected' if mine and mine.grade == l }}>{{ l }}</option>{% endfor %}
           </select>
         </div>
         <div class="grow">
-          <label class="lbl" for="playtime">Minutes</label>
+          <label class="lbl" for="playtime">Your minutes</label>
           <input type="number" min="0" name="playtime" id="playtime"
-                 value="{{ g.playtime_minutes if g.playtime_minutes is not none else '' }}">
+                 value="{{ mine.playtime_minutes if mine and mine.playtime_minutes is not none else '' }}">
         </div>
         <div class="grow">
-          <label class="lbl" for="keep_flag">Keep</label>
+          <label class="lbl" for="keep_flag">Your keep</label>
           <select name="keep_flag" id="keep_flag">
             <option value="">&mdash;</option>
-            <option value="keep" {{ 'selected' if g.keep_flag == 'keep' }}>keep</option>
-            <option value="remove" {{ 'selected' if g.keep_flag == 'remove' }}>remove</option>
+            <option value="keep" {{ 'selected' if mine and mine.keep_flag == 'keep' }}>keep</option>
+            <option value="remove" {{ 'selected' if mine and mine.keep_flag == 'remove' }}>remove</option>
           </select>
         </div>
       </div>
@@ -192,7 +229,15 @@
         </div>
         <div class="grow">
           <label class="lbl" for="section">Section</label>
-          <input type="text" name="section" id="section" value="{{ g.section or '' }}">
+          <select name="section" id="section">
+            <option value="">&mdash;</option>
+            {% for name in sections %}
+            <option value="{{ name }}" {{ 'selected' if g.section == name }}>{{ name }}</option>
+            {% endfor %}
+            {% if g.section and g.section not in sections %}
+            <option value="{{ g.section }}" selected>{{ g.section }}</option>
+            {% endif %}
+          </select>
         </div>
         <div class="grow">
           <label class="lbl" for="version">Version</label>

@@ -12,9 +12,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import URLSafeSerializer, BadSignature
 
-from . import slots, queues, exporter, importer, metadata, paste, jobs, themes
+from . import slots, queues, exporter, importer, metadata, paste, jobs, themes, grades
 from .db import (
-    db, init_db, now, today, norm_title, log_audit, get_setting_conn, set_setting,
+    db, init_db, now, today, norm_title, sort_title, log_audit, get_setting_conn, set_setting,
     hash_password, verify_password, GRADES, BROKEN_STATUSES, EXPORT_DIR, FALLBACK_DATE, DATA_DIR,
     THEMES, ACCENTS, DENSITIES, TILE_SIZES, THEME_TOKENS, DEFAULT_THEME,
 )
@@ -48,6 +48,15 @@ REMOVAL_SQL_G = (
     "g.status = 'active' AND (g.keep_flag = 'remove' OR g.grade IN ('C', 'D')"
     " OR g.broken_status = 'unfixable')"
 )
+
+
+RAIL_LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + ["#"]
+
+
+def section_names(conn) -> list:
+    """The category list, in the order the admin page put it."""
+    return [r["name"] for r in conn.execute(
+        "SELECT name FROM sections ORDER BY position, name")]
 
 
 def preflight() -> None:
@@ -240,8 +249,8 @@ def dashboard(request: Request, user=Depends(require_user)):
             "SELECT COUNT(*) AS n FROM games WHERE status = 'removed'").fetchone()["n"]
         wishlist = conn.execute("SELECT COUNT(*) AS n FROM wishlist").fetchone()["n"]
         recent = [dict(r) for r in conn.execute(
-            "SELECT *, MAX(COALESCE(last_updated, ''), COALESCE(date_added, '')) AS touched"
-            " FROM games WHERE status = 'active' ORDER BY touched DESC, id DESC LIMIT 12")]
+            "SELECT *, date_added AS touched FROM games WHERE status = 'active'"
+            " ORDER BY COALESCE(date_added, '') DESC, id DESC LIMIT 12")]
     return render(request, "dashboard.html", user=user, grade_dist=grade_dist,
                   ungraded=ungraded, removal_ready=removal_ready, removed_total=removed_total,
                   wishlist=wishlist, recent=recent, grades=GRADES)
@@ -253,7 +262,7 @@ def dashboard(request: Request, user=Depends(require_user)):
 def verify_queue(request: Request, user=Depends(require_user)):
     with db() as conn:
         games = [dict(r) for r in queues.slate(conn, user["id"], queues.VERIFY)]
-        remaining = queues.pool_count(conn, queues.VERIFY)
+        remaining = queues.pool_count(conn, queues.VERIFY, user["id"])
     return render(request, "verify.html", user=user, games=games, remaining=remaining)
 
 
@@ -270,9 +279,9 @@ def verify_submit(request: Request, game_id: int, works: str = Form(...),
             return RedirectResponse("/verify", status_code=303)
 
         conn.execute(
-            "UPDATE games SET verified = 1, verified_by = ?, verified_at = ?, last_updated = ?,"
+            "UPDATE games SET verified = 1, verified_by = ?, verified_at = ?,"
             " broken = ?, broken_status = ?, notes = ?, updated_at = ? WHERE id = ?",
-            (user["id"], now(), today(), 0 if ok else 1, None if ok else "unaddressed",
+            (user["id"], now(), 0 if ok else 1, None if ok else "unaddressed",
              notes.strip() or game["notes"], now(), game_id))
         slots.credit_check(conn, game_id, user["id"])
         log_audit(conn, game_id, user["id"], "verified", "works" if ok else "broken")
@@ -288,7 +297,7 @@ def verify_submit(request: Request, game_id: int, works: str = Form(...),
 def grade_queue(request: Request, user=Depends(require_user)):
     with db() as conn:
         games = [dict(r) for r in queues.slate(conn, user["id"], queues.GRADE)]
-        remaining = queues.pool_count(conn, queues.GRADE)
+        remaining = queues.pool_count(conn, queues.GRADE, user["id"])
     return render(request, "grade.html", user=user, games=games,
                   remaining=remaining, grades=GRADES)
 
@@ -309,11 +318,10 @@ def grade_submit(request: Request, game_id: int, grade: str = Form(""),
         game = conn.execute("SELECT notes FROM games WHERE id = ?", (game_id,)).fetchone()
         if not game:
             raise HTTPException(404, "No such game.")
-        conn.execute(
-            "UPDATE games SET grade = ?, graded_by = ?, graded_at = ?, playtime_minutes = ?,"
-            " keep_flag = ?, notes = ?, last_updated = ?, updated_at = ? WHERE id = ?",
-            (grade or None, user["id"], now(), minutes, keep_flag or None,
-             notes.strip() or game["notes"], today(), now(), game_id))
+        if notes.strip():
+            conn.execute("UPDATE games SET notes = ?, updated_at = ? WHERE id = ?",
+                         (notes.strip(), now(), game_id))
+        grades.set_grade(conn, game_id, user["id"], grade or None, minutes, keep_flag)
         log_audit(conn, game_id, user["id"], "graded", grade or "no grade")
         queues.clear_slot(conn, user["id"], queues.GRADE, game_id)
         queues.refill(conn, user["id"], queues.GRADE)
@@ -327,9 +335,10 @@ def grade_submit(request: Request, game_id: int, grade: str = Form(""),
 def library(request: Request, q: str = "", verified: str = "", grade: str = "",
             keep: str = "", section: str = "", status: str = "active",
             sort: str = "title", view: str = "grid", page: int = 1,
-            partial: int = 0, user=Depends(require_user)):
+            letter: str = "", partial: int = 0, user=Depends(require_user)):
     current = {"q": q, "verified": verified, "grade": grade, "keep": keep,
-               "section": section, "status": status, "sort": sort, "view": view}
+               "section": section, "status": status, "sort": sort, "view": view,
+               "letter": letter}
 
     # A bare visit - from the nav or a breadcrumb - resumes the last filters.
     # It has to redirect rather than just apply them, because the scroller
@@ -368,14 +377,34 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
         params.append(status)
 
     sorts = {
-        "title": "g.title COLLATE NOCASE",
-        "added": "MAX(COALESCE(g.last_updated, ''), COALESCE(g.date_added, '')) DESC, g.id DESC",
+        "title": "g.title_sort",
+        "added": "COALESCE(g.date_added, '') DESC, g.id DESC",
         "updated": "g.last_updated DESC",
         "grade": "CASE g.grade WHEN 'S' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2"
-                 " WHEN 'C' THEN 3 WHEN 'D' THEN 4 ELSE 5 END, g.title COLLATE NOCASE",
-        "playtime": "COALESCE(g.playtime_minutes, -1) ASC, g.title COLLATE NOCASE",
+                 " WHEN 'C' THEN 3 WHEN 'D' THEN 4 ELSE 5 END, g.title_sort",
+        "playtime": "COALESCE(g.playtime_minutes, -1) ASC, g.title_sort",
     }
     order = sorts.get(sort, sorts["title"])
+
+    # The A-Z rail counts against everything else being filtered, so a letter
+    # with nothing under the current filters can be shown as unavailable.
+    base_clause = (" WHERE " + " AND ".join(where)) if where else ""
+    with db() as conn:
+        rail = {r["bucket"]: r["n"] for r in conn.execute(
+            "SELECT CASE WHEN substr(g.title_sort, 1, 1) BETWEEN 'a' AND 'z'"
+            " THEN upper(substr(g.title_sort, 1, 1)) ELSE '#' END AS bucket,"
+            " COUNT(*) AS n FROM games g" + base_clause + " GROUP BY bucket", params)}
+
+    letter = (letter or "").strip().upper()[:1]
+    if letter == "#":
+        where.append("(g.title_sort IS NULL OR g.title_sort = ''"
+                     " OR substr(g.title_sort, 1, 1) NOT BETWEEN 'a' AND 'z')")
+    elif "A" <= letter <= "Z":
+        where.append("substr(g.title_sort, 1, 1) = ?")
+        params.append(letter.lower())
+    else:
+        letter = ""
+
     clause = (" WHERE " + " AND ".join(where)) if where else ""
 
     page = max(1, page)
@@ -386,9 +415,7 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
             "SELECT g.*, u.username AS grader FROM games g"
             " LEFT JOIN users u ON u.id = g.graded_by" + clause +
             " ORDER BY " + order + " LIMIT ? OFFSET ?", (*params, per, (page - 1) * per))]
-        sections = [r["section"] for r in conn.execute(
-            "SELECT DISTINCT section FROM games WHERE section IS NOT NULL ORDER BY section")
-            if r["section"]]
+        sections = section_names(conn)
 
     if partial:
         # Only the repeatable rows, for the infinite scroller to append.
@@ -404,9 +431,10 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
 
     return render(request, "library.html", user=user, games=rows, total=total, page=page,
                   pages=max(1, (total + per - 1) // per), sections=sections, grades=GRADES,
-                  view=view,
+                  view=view, rail_counts=rail, letters=RAIL_LETTERS,
                   f={"q": q, "verified": verified, "grade": grade, "keep": keep,
-                     "section": section, "status": status, "sort": sort, "view": view})
+                     "section": section, "status": status, "sort": sort, "view": view,
+                     "letter": letter})
 
 
 @app.get("/recent", response_class=HTMLResponse)
@@ -414,10 +442,10 @@ def recent(request: Request, n: int = 50, user=Depends(require_user)):
     n = max(1, min(n, 500))
     with db() as conn:
         rows = [dict(r) for r in conn.execute(
-            "SELECT g.*, u.username AS grader,"
-            " MAX(COALESCE(g.last_updated, ''), COALESCE(g.date_added, '')) AS touched"
+            "SELECT g.*, u.username AS grader, g.date_added AS touched"
             " FROM games g LEFT JOIN users u ON u.id = g.graded_by"
-            " WHERE g.status = 'active' ORDER BY touched DESC, g.id DESC LIMIT ?", (n,))]
+            " WHERE g.status = 'active'"
+            " ORDER BY COALESCE(g.date_added, '') DESC, g.id DESC LIMIT ?", (n,))]
     return render(request, "recent.html", user=user, games=rows, n=n,
                   fallback_date=FALLBACK_DATE)
 
@@ -434,8 +462,12 @@ def game_detail(request: Request, game_id: int, err: str = "", user=Depends(requ
         history = [dict(r) for r in conn.execute(
             "SELECT a.*, u.username AS display_name FROM audit a LEFT JOIN users u ON u.id = a.user_id"
             " WHERE a.game_id = ? ORDER BY a.id DESC LIMIT 30", (game_id,))]
+        panels = grades.panels(conn, game_id, user["id"])
+        mine = grades.for_game(conn, game_id).get(user["id"])
+        sections = section_names(conn)
     return render(request, "game.html", user=user, g=dict(row), history=history, err=err,
-                  grades=GRADES, broken_statuses=BROKEN_STATUSES,
+                  grades=GRADES, broken_statuses=BROKEN_STATUSES, panels=panels,
+                  mine=dict(mine) if mine else None, sections=sections,
                   igdb=metadata.igdb_available())
 
 
@@ -472,15 +504,15 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
 
     with db() as conn:
         conn.execute(
-            "UPDATE games SET title = ?, title_norm = ?, section = ?, date_added = ?,"
-            " verified = ?, grade = ?, playtime_minutes = ?, keep_flag = ?, notes = ?,"
-            " broken = ?, broken_status = ?, version = ?, steam_appid = ?, cover_url = ?,"
-            " store_url = ?, last_updated = ?, updated_at = ? WHERE id = ?",
-            (title.strip(), norm_title(title), section.strip() or None,
-             date_added.strip() or FALLBACK_DATE, is_verified, grade or None, minutes,
-             keep_flag or None, notes.strip() or None, is_broken, broken_status or None,
-             version.strip() or None, appid, cover_url.strip() or None,
-             store_url.strip() or None, today(), now(), game_id))
+            "UPDATE games SET title = ?, title_norm = ?, title_sort = ?, section = ?,"
+            " date_added = ?, verified = ?, notes = ?, broken = ?, broken_status = ?,"
+            " version = ?, steam_appid = ?, cover_url = ?, store_url = ?, updated_at = ?"
+            " WHERE id = ?",
+            (title.strip(), norm_title(title), sort_title(title), section.strip() or None,
+             date_added.strip() or FALLBACK_DATE, is_verified, notes.strip() or None,
+             is_broken, broken_status or None, version.strip() or None, appid,
+             cover_url.strip() or None, store_url.strip() or None, now(), game_id))
+        grades.set_grade(conn, game_id, user["id"], grade or None, minutes, keep_flag)
         log_audit(conn, game_id, user["id"], "edited", "")
     exporter.export(tag="edit")
     return RedirectResponse("/game/%d" % game_id, status_code=303)
@@ -733,14 +765,14 @@ def broken_update(request: Request, game_id: int, broken_status: str = Form(...)
         if broken_status == "fixed_recheck":
             conn.execute(
                 "UPDATE games SET broken = 0, broken_status = NULL, notes = ?, verified = 0,"
-                " verified_by = NULL, verified_at = NULL, last_updated = ?, updated_at = ?"
-                " WHERE id = ?", (notes.strip() or game["notes"], today(), now(), game_id))
+                " verified_by = NULL, verified_at = NULL, updated_at = ?"
+                " WHERE id = ?", (notes.strip() or game["notes"], now(), game_id))
             log_audit(conn, game_id, user["id"], "fixed", "back to verify")
         else:
             conn.execute(
-                "UPDATE games SET broken_status = ?, notes = ?, last_updated = ?, updated_at = ?"
+                "UPDATE games SET broken_status = ?, notes = ?, updated_at = ?"
                 " WHERE id = ?", (broken_status, notes.strip() or game["notes"],
-                                  today(), now(), game_id))
+                                  now(), game_id))
             log_audit(conn, game_id, user["id"], "broken", broken_status)
     exporter.export(tag="broken")
     return RedirectResponse("/broken", status_code=303)
@@ -871,10 +903,11 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
                 continue
             appid = item["steam_appid"]
             cur = conn.execute(
-                "INSERT INTO games (title, title_norm, section, date_added, verified,"
+                "INSERT INTO games (title, title_norm, title_sort, section, date_added, verified,"
                 " steam_appid, store_url, cover_url, created_at, updated_at)"
-                " VALUES (?, ?, 'Recently Added', ?, 0, ?, ?, ?, ?, ?)",
-                (item["title"], norm_title(item["title"]), today(), appid,
+                " VALUES (?, ?, ?, 'Recently Added', ?, 0, ?, ?, ?, ?, ?)",
+                (item["title"], norm_title(item["title"]), sort_title(item["title"]),
+                 today(), appid,
                  metadata.steam_store_url(appid) if appid else (item["url"] or None),
                  None, now(), now()))
             slots.spend(conn, cur.lastrowid, user["id"], "added")
@@ -933,10 +966,11 @@ def wishlist_promote(request: Request, item_id: int, user=Depends(require_user))
                                 (item["title_norm"],)).fetchone()
         if not existing:
             cur = conn.execute(
-                "INSERT INTO games (title, title_norm, section, date_added, verified,"
+                "INSERT INTO games (title, title_norm, title_sort, section, date_added, verified,"
                 " steam_appid, store_url, cover_url, notes, created_at, updated_at)"
-                " VALUES (?, ?, 'Recently Added', ?, 0, ?, ?, ?, ?, ?, ?)",
-                (item["title"], item["title_norm"], today(), item["steam_appid"],
+                " VALUES (?, ?, ?, 'Recently Added', ?, 0, ?, ?, ?, ?, ?, ?)",
+                (item["title"], item["title_norm"], sort_title(item["title"]),
+                 today(), item["steam_appid"],
                  item["store_url"], item["cover_url"], item["notes"], now(), now()))
             slots.spend(conn, cur.lastrowid, user["id"], "added")
             log_audit(conn, cur.lastrowid, user["id"], "added", "from wishlist")
@@ -962,6 +996,12 @@ def admin_page(request: Request, user=Depends(require_admin)):
             " ORDER BY username")]
         guest = conn.execute(
             "SELECT username, password_hash FROM users WHERE is_guest = 1").fetchone()
+        section_rows = [dict(r) for r in conn.execute(
+            "SELECT s.name, s.position,"
+            " (SELECT COUNT(*) FROM games WHERE section = s.name) AS games"
+            " FROM sections s ORDER BY s.position, s.name")]
+        seats = {r["grade_seat"]: r["id"] for r in conn.execute(
+            "SELECT id, grade_seat FROM users WHERE grade_seat IN (1, 2)")}
         settings = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings")}
         events = [dict(r) for r in slots.recent_events(conn, 20)]
         no_cover = conn.execute(
@@ -974,6 +1014,7 @@ def admin_page(request: Request, user=Depends(require_admin)):
     return render(request, "admin.html", user=user, users=users, settings=settings,
                   events=events, exports=exports, no_cover=no_cover,
                   guest=dict(guest) if guest else None,
+                  section_rows=section_rows, seats=seats,
                   igdb=metadata.igdb_available(), job=jobs.status())
 
 
@@ -1009,6 +1050,69 @@ def admin_users(request: Request, username: str = Form(...),
             " created_at) VALUES (?, ?, ?, ?, 0, ?) ON CONFLICT(username) DO UPDATE SET"
             " display_name = excluded.username, is_admin = excluded.is_admin, is_guest = 0",
             (name, name, hash_password(password), 1 if is_admin == "1" else 0, now()))
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/sections")
+def admin_sections(request: Request, action: str = Form(...), name: str = Form(""),
+                   rename: str = Form(""), user=Depends(require_admin)):
+    """Add, rename, reorder or remove a category."""
+    name = name.strip()
+    with db() as conn:
+        if action == "add" and name:
+            nxt = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM sections").fetchone()["p"]
+            conn.execute("INSERT OR IGNORE INTO sections (name, position, created_at)"
+                         " VALUES (?, ?, ?)", (name, nxt, now()))
+        elif action == "rename" and name and rename.strip():
+            new_name = rename.strip()
+            row = conn.execute("SELECT id FROM sections WHERE name = ?", (name,)).fetchone()
+            clash = conn.execute("SELECT id FROM sections WHERE name = ?", (new_name,)).fetchone()
+            if row and not clash:
+                conn.execute("UPDATE sections SET name = ? WHERE id = ?", (new_name, row["id"]))
+                # Games carry the name, so they move with it.
+                conn.execute("UPDATE games SET section = ?, updated_at = ? WHERE section = ?",
+                             (new_name, now(), name))
+        elif action == "delete" and name:
+            # The games survive; they just stop belonging to a category.
+            conn.execute("UPDATE games SET section = NULL, updated_at = ? WHERE section = ?",
+                         (now(), name))
+            conn.execute("DELETE FROM sections WHERE name = ?", (name,))
+        elif action in ("up", "down") and name:
+            rows = [dict(r) for r in conn.execute(
+                "SELECT id, name FROM sections ORDER BY position, name")]
+            names = [r["name"] for r in rows]
+            if name in names:
+                i = names.index(name)
+                j = i - 1 if action == "up" else i + 1
+                if 0 <= j < len(rows):
+                    rows[i], rows[j] = rows[j], rows[i]
+                    for pos, r in enumerate(rows):
+                        conn.execute("UPDATE sections SET position = ? WHERE id = ?",
+                                     (pos, r["id"]))
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/seats")
+def admin_seats(request: Request, left: str = Form(""), right: str = Form(""),
+                user=Depends(require_admin)):
+    """Assign the two grade columns. Left is blue, right is purple."""
+    def as_id(value):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    left_id, right_id = as_id(left), as_id(right)
+    if left_id is not None and left_id == right_id:
+        right_id = None
+    with db() as conn:
+        conn.execute("UPDATE users SET grade_seat = NULL")
+        for seat, uid in ((1, left_id), (2, right_id)):
+            if uid is not None:
+                conn.execute(
+                    "UPDATE users SET grade_seat = ? WHERE id = ?"
+                    " AND COALESCE(is_guest, 0) = 0", (seat, uid))
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -1238,16 +1342,15 @@ def export_text(request: Request, fmt: str = "markdown", scope: str = "recent",
     n = max(1, min(n, 3000))
     if scope == "recent":
         sql = ("SELECT * FROM games WHERE status = 'active'"
-               " ORDER BY MAX(COALESCE(last_updated, ''), COALESCE(date_added, '')) DESC,"
-               " id DESC LIMIT ?")
+               " ORDER BY COALESCE(date_added, '') DESC, id DESC LIMIT ?")
         params = (n,)
     elif scope == "section" and section:
         sql = ("SELECT * FROM games WHERE status = 'active' AND section = ?"
-               " ORDER BY title COLLATE NOCASE LIMIT ?")
+               " ORDER BY title_sort LIMIT ?")
         params = (section, n)
     elif scope == "slated":
         sql = ("SELECT * FROM games WHERE slated_at IS NOT NULL AND status = 'active'"
-               " ORDER BY title COLLATE NOCASE LIMIT ?")
+               " ORDER BY title_sort LIMIT ?")
         params = (n,)
     elif scope == "removal":
         sql = "SELECT * FROM games WHERE " + REMOVAL_SQL + " ORDER BY title COLLATE NOCASE LIMIT ?"

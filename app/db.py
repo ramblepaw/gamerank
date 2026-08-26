@@ -1,4 +1,5 @@
 """SQLite storage. One file, mounted volume, no server dependency."""
+import json
 import os
 import re
 import sqlite3
@@ -86,6 +87,26 @@ CREATE INDEX IF NOT EXISTS idx_games_verified ON games(verified, status);
 CREATE INDEX IF NOT EXISTS idx_games_grade ON games(grade, status);
 CREATE INDEX IF NOT EXISTS idx_games_titlenorm ON games(title_norm);
 CREATE INDEX IF NOT EXISTS idx_games_added ON games(date_added);
+
+CREATE TABLE IF NOT EXISTS game_grades (
+    game_id          INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    grade            TEXT,
+    playtime_minutes INTEGER,
+    keep_flag        TEXT,
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL,
+    PRIMARY KEY (game_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_gg_game ON game_grades(game_id);
+CREATE INDEX IF NOT EXISTS idx_gg_user ON game_grades(user_id);
+
+CREATE TABLE IF NOT EXISTS sections (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    position   INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS slot_state (
     id           INTEGER PRIMARY KEY CHECK (id = 1),
@@ -212,6 +233,12 @@ MIGRATIONS = [
     ("users", "library_filters", "TEXT"),
     # A shared, read-only account for people who just want to look.
     ("users", "is_guest", "INTEGER"),
+    # Which grade column an account owns: 1 is left and blue, 2 is right and
+    # purple. NULL means the account grades without holding a column.
+    ("users", "grade_seat", "INTEGER"),
+    # Alphabetical key with the leading article dropped. Stored rather than
+    # recomputed per query so the masterlist can sort and index on it.
+    ("games", "title_sort", "TEXT"),
 ]
 
 
@@ -221,6 +248,34 @@ def now() -> str:
 
 def today() -> str:
     return datetime.now(timezone.utc).date().isoformat()
+
+
+# Leading words a shelf would file under the next word instead.
+SORT_STOPWORDS = ("a", "an", "the")
+
+
+def sort_title(title: str) -> str:
+    """Alphabetical key: leading article dropped, accents folded.
+
+    "A Bumpy Ride" files under B and "The Sinking City" under S, which is where
+    someone looking for them runs their finger down the list.
+    """
+    folded = unicodedata.normalize("NFKD", title or "")
+    folded = "".join(c for c in folded if not unicodedata.combining(c)).lower()
+    folded = folded.replace("&", " and ")
+    folded = re.sub(r"[^a-z0-9 ]+", " ", folded)
+    folded = re.sub(r"[ ]+", " ", folded).strip()
+    first, _, rest = folded.partition(" ")
+    # A game actually called "The" keeps its word rather than sorting as blank.
+    if first in SORT_STOPWORDS and rest:
+        folded = rest
+    return folded
+
+
+def sort_letter(title_sort: str) -> str:
+    """The bucket a title belongs to in the A-Z rail. Digits and symbols share #."""
+    first = (title_sort or "")[:1].upper()
+    return first if "A" <= first <= "Z" else "#"
 
 
 def norm_title(title: str) -> str:
@@ -305,6 +360,8 @@ def init_db() -> None:
                 )
                 conn.execute(f"UPDATE games SET {legacy} = NULL")
 
+        backfill(conn)
+
         for key, value in DEFAULT_SETTINGS.items():
             conn.execute(
                 "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
@@ -319,6 +376,61 @@ def init_db() -> None:
                 " VALUES (?, ?, ?, 1, ?)",
                 ("admin", "Admin", "", now()),
             )
+
+
+def backfill(conn) -> None:
+    """Fill in what the new columns and tables need on a database that predates them."""
+    missing = conn.execute(
+        "SELECT id, title FROM games WHERE title_sort IS NULL OR title_sort = ''").fetchall()
+    for row in missing:
+        conn.execute("UPDATE games SET title_sort = ? WHERE id = ?",
+                     (sort_title(row["title"]), row["id"]))
+
+    # Grades used to be one column on the game. Move each into the per-grader
+    # table, credited to whoever set it.
+    if conn.execute("SELECT COUNT(*) AS n FROM game_grades").fetchone()["n"] == 0:
+        fallback = conn.execute(
+            "SELECT id FROM users WHERE COALESCE(is_guest, 0) = 0"
+            " ORDER BY is_admin DESC, id LIMIT 1").fetchone()
+        rows = conn.execute(
+            "SELECT id, grade, graded_by, graded_at, playtime_minutes, keep_flag"
+            " FROM games WHERE grade IS NOT NULL AND grade != ''").fetchall()
+        for r in rows:
+            uid = r["graded_by"] or (fallback["id"] if fallback else None)
+            if uid is None:
+                continue
+            stamp = r["graded_at"] or now()
+            conn.execute(
+                "INSERT OR IGNORE INTO game_grades (game_id, user_id, grade,"
+                " playtime_minutes, keep_flag, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (r["id"], uid, r["grade"], r["playtime_minutes"], r["keep_flag"], stamp, stamp))
+
+    # Sections were a free-text column plus an ordering setting; they are rows now.
+    if conn.execute("SELECT COUNT(*) AS n FROM sections").fetchone()["n"] == 0:
+        seen = [r["section"] for r in conn.execute(
+            "SELECT section, MIN(id) AS first_id FROM games"
+            " WHERE section IS NOT NULL AND section != '' GROUP BY section ORDER BY first_id")]
+        try:
+            order = [x for x in json.loads(get_setting_conn(conn, "section_order", "") or "[]") if x]
+        except ValueError:
+            order = []
+        for name in seen:
+            if name not in order:
+                order.append(name)
+        for pos, name in enumerate(order):
+            conn.execute(
+                "INSERT OR IGNORE INTO sections (name, position, created_at) VALUES (?, ?, ?)",
+                (name, pos, now()))
+
+    # The first two accounts take the two grade columns; admin can swap them.
+    held = conn.execute(
+        "SELECT COUNT(*) AS n FROM users WHERE grade_seat IS NOT NULL").fetchone()["n"]
+    if not held:
+        rows = conn.execute(
+            "SELECT id FROM users WHERE COALESCE(is_guest, 0) = 0 ORDER BY id LIMIT 2").fetchall()
+        for seat, r in enumerate(rows, start=1):
+            conn.execute("UPDATE users SET grade_seat = ? WHERE id = ?", (seat, r["id"]))
 
 
 def get_setting_conn(conn, key: str, default: str = "") -> str:

@@ -17,7 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from .db import norm_title, now
+from .db import norm_title, sort_title, now
 
 TIMEOUT = 15
 # How alike two normalised titles must be before art is written without asking.
@@ -618,6 +618,8 @@ def apply(conn, game_id: int, meta: dict, overwrite_title: bool = False) -> None
         params.append(meta["title"])
         sets.append("title_norm = ?")
         params.append(norm_title(meta["title"]))
+        sets.append("title_sort = ?")
+        params.append(sort_title(meta["title"]))
     if not sets:
         return
     sets.append("meta_fetched_at = ?")

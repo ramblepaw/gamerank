@@ -5,7 +5,9 @@ import json
 import io
 from datetime import datetime
 
-from .db import db, now, norm_title, GRADES, get_setting_conn, FALLBACK_DATE
+from . import grades
+from .db import (db, now, norm_title, sort_title, GRADES,
+                 get_setting_conn, FALLBACK_DATE, backfill)
 
 HEADER_MAP = {
     "title": "title",
@@ -68,9 +70,14 @@ def parse_csv(text: str) -> dict:
 
     header = [c.strip().lower() for c in rows[header_idx]]
     cols = {}
+    # "Grade: alice" restores alice's own grade; the plain Grade column is the
+    # rolled-up one and is recomputed rather than trusted.
+    grader_cols = {}
     for idx, name in enumerate(header):
         if name in HEADER_MAP:
             cols[HEADER_MAP[name]] = idx
+        elif name.startswith("grade:"):
+            grader_cols[name.split(":", 1)[1].strip()] = idx
 
     if "title" not in cols:
         raise ValueError("No Title column found.")
@@ -109,9 +116,17 @@ def parse_csv(text: str) -> dict:
             date_added = FALLBACK_DATE
             no_date += 1
 
+        by_grader = {}
+        for who, idx in grader_cols.items():
+            value = (row[idx].strip().upper() if idx < len(row) else "")
+            if value in GRADES:
+                by_grader[who] = value
+
         games.append({
             "title": first,
             "title_norm": norm_title(first),
+            "title_sort": sort_title(first),
+            "graders": by_grader,
             "section": current_section,
             "date_added": date_added,
             "last_updated": _date(cell("last_updated")),
@@ -154,15 +169,18 @@ def import_csv(text: str, user_id=None, replace: bool = True) -> dict:
             conn.execute("UPDATE slot_events SET game_id = NULL")
             conn.execute("DELETE FROM games")
 
+        restored = set()
         for g in games:
-            conn.execute(
-                "INSERT INTO games (title, title_norm, section, date_added, last_updated, notes,"
+            cur = conn.execute(
+                "INSERT INTO games (title, title_norm, title_sort, section, date_added,"
+                " last_updated, notes,"
                 " verified, grade, playtime_minutes, keep_flag, steam_appid, store_url,"
                 " legacy_ea, legacy_own, legacy_portable, legacy_completed, legacy_badge,"
                 " legacy_emulator, created_at, updated_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    g["title"], g["title_norm"], g["section"], g["date_added"], g["last_updated"],
+                    g["title"], g["title_norm"], g["title_sort"], g["section"], g["date_added"],
+                    g["last_updated"],
                     g["notes"], g["verified"], g["grade"], g["playtime_minutes"], g["keep_flag"],
                     g["steam_appid"],
                     "https://store.steampowered.com/app/%d/" % g["steam_appid"] if g["steam_appid"] else None,
@@ -170,6 +188,27 @@ def import_csv(text: str, user_id=None, replace: bool = True) -> dict:
                     g["legacy_badge"], g["legacy_emulator"], now(), now(),
                 ),
             )
+            for who, letter in g["graders"].items():
+                owner = conn.execute("SELECT id FROM users WHERE username = ?", (who,)).fetchone()
+                if owner:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO game_grades (game_id, user_id, grade,"
+                        " playtime_minutes, keep_flag, created_at, updated_at)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (cur.lastrowid, owner["id"], letter, g["playtime_minutes"],
+                         g["keep_flag"], now(), now()))
+                    restored.add(cur.lastrowid)
+
+        # Categories seen in the sheet become rows, and anything else the new
+        # columns need gets filled in.
+        for pos, name in enumerate(dict.fromkeys(parsed["sections"])):
+            conn.execute("INSERT OR IGNORE INTO sections (name, position, created_at)"
+                         " VALUES (?, ?, ?)", (name, pos, now()))
+        backfill(conn)
+        # The plain Grade column is derived, so rebuild it from what was restored
+        # rather than trusting whatever the sheet happened to hold.
+        for game_id in restored:
+            grades.recompute(conn, game_id)
 
         limit = int(get_setting_conn(conn, "slot_limit", "50"))
         intake_unverified = conn.execute(
