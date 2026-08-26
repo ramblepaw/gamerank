@@ -20,7 +20,7 @@
       {% if g.store_url %}<span>{{ steamlink(g) }}</span>{% endif %}
     </div>
 
-    <div class="seg grades" role="radiogroup" aria-label="Grade">
+    <div class="seg grades optional" role="radiogroup" aria-label="Grade">
       {% for letter in grades %}
       <input type="radio" name="grade" id="g-{{ g.id }}-{{ letter }}" value="{{ letter }}">
       <label for="g-{{ g.id }}-{{ letter }}" class="g-{{ letter }}">{{ letter }}</label>
@@ -34,7 +34,7 @@
       </div>
       <div class="grow">
         <label class="lbl">Keep</label>
-        <div class="seg">
+        <div class="seg optional">
           <input type="radio" name="keep_flag" id="k-{{ g.id }}" value="keep">
           <label for="k-{{ g.id }}">Keep</label>
           <input type="radio" name="keep_flag" id="r-{{ g.id }}" value="remove">

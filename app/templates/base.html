@@ -93,6 +93,16 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') menus.forEach(function (m) { m.open = false; });
   });
+
+  // Groups marked .seg.optional can be turned back off: clicking the button
+  // that is already on clears it. A radio group will not do that by itself,
+  // and picking nothing is a real answer in all of them.
+  document.querySelectorAll('.seg.optional label').forEach(function (lab) {
+    lab.addEventListener('click', function (e) {
+      var input = document.getElementById(lab.htmlFor);
+      if (input && input.checked) { e.preventDefault(); input.checked = false; }
+    });
+  });
 })();
 </script>
 </body>

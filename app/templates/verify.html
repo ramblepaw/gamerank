@@ -20,7 +20,7 @@
       {% if g.store_url %}<span>{{ steamlink(g) }}</span>{% endif %}
     </div>
 
-    <div class="seg yn" role="radiogroup" aria-label="Does it work?">
+    <div class="seg yn optional" role="radiogroup" aria-label="Does it work?">
       <input type="radio" name="works" id="wy-{{ g.id }}" value="yes" required>
       <label class="yes" for="wy-{{ g.id }}">Works</label>
       <input type="radio" name="works" id="wn-{{ g.id }}" value="no">
@@ -49,16 +49,4 @@
   </div>
 </form>
 {% endfor %}
-
-<script>
-// Neither repack picked is the ordinary case, so there is no button for it.
-// Clicking the one that is already on turns it back off, which a radio group
-// will not do by itself.
-document.querySelectorAll('.seg.optional label').forEach(function (lab) {
-  lab.addEventListener('click', function (e) {
-    var input = document.getElementById(lab.htmlFor);
-    if (input && input.checked) { e.preventDefault(); input.checked = false; }
-  });
-});
-</script>
 {% endblock %}
