@@ -155,7 +155,8 @@ def require_admin(request: Request):
 # without needing an account each. It is shared, so it gets no write of any
 # kind: this is the single choke point, and a route added later is refused by
 # default rather than having to be remembered and guarded.
-GUEST_PAGES = {"/", "/library", "/recent", "/export.txt", "/logout", "/healthz"}
+GUEST_PAGES = {"/", "/library", "/recent", "/export.txt", "/logout", "/healthz",
+               "/favicon.ico", "/site.webmanifest"}
 
 
 def guest_may_see(method: str, path: str) -> bool:
@@ -1509,6 +1510,20 @@ def export_text(request: Request, fmt: str = "markdown", scope: str = "recent",
     with db() as conn:
         rows = conn.execute(sql, params).fetchall()
     return exporter.plain_text(rows, fmt)
+
+
+# Browsers ask for these at the root whatever the page says, and a bookmark
+# made before the page loads asks for nothing else.
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(os.path.join(BASE, "static", "favicon.ico"),
+                        media_type="image/x-icon")
+
+
+@app.get("/site.webmanifest", include_in_schema=False)
+def webmanifest():
+    return FileResponse(os.path.join(BASE, "static", "site.webmanifest"),
+                        media_type="application/manifest+json")
 
 
 @app.get("/healthz")
