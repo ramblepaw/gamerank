@@ -330,6 +330,13 @@ def grade_submit(request: Request, game_id: int, grade: str = Form(""),
     except ValueError:
         minutes = None
 
+    if not grade:
+        # A card with no letter on it is a slip or a page left open since the
+        # game was graded somewhere else. Either way there is nothing to
+        # record, and treating it as "clear the grade" threw away real work.
+        # Removing a grade on purpose is done on the game's own page.
+        return RedirectResponse("/grade", status_code=303)
+
     with db() as conn:
         game = conn.execute("SELECT notes FROM games WHERE id = ?", (game_id,)).fetchone()
         if not game:
@@ -337,8 +344,8 @@ def grade_submit(request: Request, game_id: int, grade: str = Form(""),
         if notes.strip():
             conn.execute("UPDATE games SET notes = ?, updated_at = ? WHERE id = ?",
                          (notes.strip(), now(), game_id))
-        grades.set_grade(conn, game_id, user["id"], grade or None, minutes, keep_flag)
-        log_audit(conn, game_id, user["id"], "graded", grade or "no grade")
+        grades.set_grade(conn, game_id, user["id"], grade, minutes, keep_flag)
+        log_audit(conn, game_id, user["id"], "graded", grade)
         queues.clear_slot(conn, user["id"], queues.GRADE, game_id)
         queues.refill(conn, user["id"], queues.GRADE)
     exporter.export(tag="grade")
