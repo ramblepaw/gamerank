@@ -59,7 +59,6 @@ CREATE TABLE IF NOT EXISTS games (
     graded_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
     graded_at         TEXT,
     playtime_minutes  INTEGER,
-    keep_flag         TEXT,
 
     status            TEXT NOT NULL DEFAULT 'active',
     removed_at        TEXT,
@@ -96,7 +95,6 @@ CREATE TABLE IF NOT EXISTS game_grades (
     user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     grade            TEXT,
     playtime_minutes INTEGER,
-    keep_flag        TEXT,
     created_at       TEXT NOT NULL,
     updated_at       TEXT NOT NULL,
     PRIMARY KEY (game_id, user_id)
@@ -397,7 +395,7 @@ def backfill(conn) -> None:
             "SELECT id FROM users WHERE COALESCE(is_guest, 0) = 0"
             " ORDER BY is_admin DESC, id LIMIT 1").fetchone()
         rows = conn.execute(
-            "SELECT id, grade, graded_by, graded_at, playtime_minutes, keep_flag"
+            "SELECT id, grade, graded_by, graded_at, playtime_minutes"
             " FROM games WHERE grade IS NOT NULL AND grade != ''").fetchall()
         for r in rows:
             uid = r["graded_by"] or (fallback["id"] if fallback else None)
@@ -406,9 +404,9 @@ def backfill(conn) -> None:
             stamp = r["graded_at"] or now()
             conn.execute(
                 "INSERT OR IGNORE INTO game_grades (game_id, user_id, grade,"
-                " playtime_minutes, keep_flag, created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (r["id"], uid, r["grade"], r["playtime_minutes"], r["keep_flag"], stamp, stamp))
+                " playtime_minutes, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (r["id"], uid, r["grade"], r["playtime_minutes"], stamp, stamp))
 
     # Sections were a free-text column plus an ordering setting; they are rows now.
     if conn.execute("SELECT COUNT(*) AS n FROM sections").fetchone()["n"] == 0:
@@ -427,12 +425,16 @@ def backfill(conn) -> None:
                 "INSERT OR IGNORE INTO sections (name, position, created_at) VALUES (?, ?, ?)",
                 (name, pos, now()))
 
-    # Broken was briefly a set of ticket stages. It is a yes or no.
-    if "broken_status" in _columns(conn, "games"):
-        try:
-            conn.execute("ALTER TABLE games DROP COLUMN broken_status")
-        except sqlite3.OperationalError:
-            pass                              # SQLite older than 3.35
+    # Columns for ideas that were tried and dropped. Removing them keeps the
+    # row honest about what the app actually records.
+    for table, column in (("games", "broken_status"),
+                          ("games", "keep_flag"),
+                          ("game_grades", "keep_flag")):
+        if column in _columns(conn, table):
+            try:
+                conn.execute("ALTER TABLE %s DROP COLUMN %s" % (table, column))
+            except sqlite3.OperationalError:
+                pass                          # SQLite older than 3.35
 
     # The first two accounts take the two grade columns; admin can swap them.
     held = conn.execute(

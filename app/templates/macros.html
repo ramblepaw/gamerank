@@ -36,9 +36,11 @@
       {% endif %}
       {% if g.status == 'active' and may_edit %}
         {% if g.slated_at %}
-        <form method="post" action="/game/{{ g.id }}/unslate" autocomplete="off" data-form-type="other">
-          <button class="tileact" type="submit" title="Take off the removal list">keep</button>
-        </form>
+          {% if user and user.is_admin %}
+          <form method="post" action="/game/{{ g.id }}/unslate" autocomplete="off" data-form-type="other">
+            <button class="tileact" type="submit" title="Take off the removal list">keep</button>
+          </form>
+          {% endif %}
         {% else %}
         <form method="post" action="/game/{{ g.id }}/slate" autocomplete="off" data-form-type="other">
           <button class="tileact danger" type="submit" title="Add to the removal list">remove</button>

@@ -94,7 +94,6 @@
           <div class="letter grade-letter g-{{ p.grade }}">{{ p.grade }}</div>
           <div class="meta">
             {% if p.playtime_minutes is not none %}{{ p.playtime_minutes }} min{% else %}no playtime{% endif %}
-            {% if p.keep_flag %} &middot; {{ p.keep_flag }}{% endif %}
           </div>
         {% elif p.hidden %}
           <div class="letter none">&nbsp;</div>
@@ -120,10 +119,7 @@
           <div class="lbl">Played</div>
           {{ g.playtime_minutes ~ ' min' if g.playtime_minutes is not none else '—' }}
         </div>
-        <div class="grow">
-          <div class="lbl">Keep</div>
-          {{ g.keep_flag or '—' }}
-        </div>
+
       </div>
 
       <div class="row" style="margin-top:14px">
@@ -171,7 +167,6 @@
           <div class="letter grade-letter g-{{ p.grade }}">{{ p.grade }}</div>
           <div class="meta">
             {% if p.playtime_minutes is not none %}{{ p.playtime_minutes }} min{% else %}no playtime{% endif %}
-            {% if p.keep_flag %} &middot; {{ p.keep_flag }}{% endif %}
           </div>
         {% elif p.hidden %}
           <div class="letter none">&nbsp;</div>
@@ -234,14 +229,7 @@
           <input type="number" min="0" name="playtime" id="playtime"
                  value="{{ mine.playtime_minutes if mine and mine.playtime_minutes is not none else '' }}">
         </div>
-        <div class="grow">
-          <label class="lbl" for="keep_flag">Your keep</label>
-          <select name="keep_flag" id="keep_flag">
-            <option value="">&mdash;</option>
-            <option value="keep" {{ 'selected' if mine and mine.keep_flag == 'keep' }}>keep</option>
-            <option value="remove" {{ 'selected' if mine and mine.keep_flag == 'remove' }}>remove</option>
-          </select>
-        </div>
+
       </div>
 
       <div style="margin-top:12px">
@@ -309,7 +297,9 @@
         <a class="btn" href="/library">Library</a>
         {% if g.status == 'active' %}
           {% if g.slated_at %}
+          {% if user.is_admin %}
           <button type="submit" formaction="/game/{{ g.id }}/unslate" formnovalidate>Take off removal list</button>
+          {% endif %}
           {% else %}
           <button class="bad" type="submit" formaction="/game/{{ g.id }}/slate" formnovalidate>Slate for removal</button>
           {% endif %}

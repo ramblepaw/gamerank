@@ -49,8 +49,8 @@
       </td>
       <td>{{ g.playtime_minutes ~ 'm' if g.playtime_minutes is not none else '—' }}</td>
       <td style="color:var(--dim)">{{ g.slated_at[:10] if g.slated_at }}</td>
-      <td><form method="post" action="/game/{{ g.id }}/unslate" autocomplete="off" data-form-type="other">
-            <button class="sm" type="submit">Keep</button></form></td>
+      <td>{% if user.is_admin %}<form method="post" action="/game/{{ g.id }}/unslate" autocomplete="off" data-form-type="other">
+            <button class="sm" type="submit">Keep</button></form>{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>

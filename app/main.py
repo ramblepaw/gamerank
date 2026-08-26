@@ -336,8 +336,8 @@ def grade_queue(request: Request, user=Depends(require_user)):
 
 @app.post("/grade/{game_id}")
 def grade_submit(request: Request, game_id: int, grade: str = Form(""),
-                 playtime: str = Form(""), keep_flag: str = Form(""),
-                 notes: str = Form(""), user=Depends(require_user)):
+                 playtime: str = Form(""), notes: str = Form(""),
+                 user=Depends(require_user)):
     grade = (grade or "").strip().upper()
     if grade and grade not in GRADES:
         raise HTTPException(400, "Unknown grade.")
@@ -360,7 +360,7 @@ def grade_submit(request: Request, game_id: int, grade: str = Form(""),
         if notes.strip():
             conn.execute("UPDATE games SET notes = ?, updated_at = ? WHERE id = ?",
                          (notes.strip(), now(), game_id))
-        grades.set_grade(conn, game_id, user["id"], grade, minutes, keep_flag)
+        grades.set_grade(conn, game_id, user["id"], grade, minutes)
         log_audit(conn, game_id, user["id"], "graded", grade)
         queues.clear_slot(conn, user["id"], queues.GRADE, game_id)
         queues.refill(conn, user["id"], queues.GRADE)
@@ -372,11 +372,11 @@ def grade_submit(request: Request, game_id: int, grade: str = Form(""),
 
 @app.get("/library", response_class=HTMLResponse)
 def library(request: Request, q: str = "", verified: str = "", grade: str = "",
-            keep: str = "", section: str = "", status: str = "active",
+            section: str = "", status: str = "active",
             sort: str = "title", view: str = "grid", page: int = 1,
             letter: str = "", repack: str = "", partial: int = 0,
             user=Depends(require_user)):
-    current = {"q": q, "verified": verified, "grade": grade, "keep": keep,
+    current = {"q": q, "verified": verified, "grade": grade,
                "section": section, "status": status, "sort": sort, "view": view,
                "letter": letter, "repack": repack}
 
@@ -409,9 +409,6 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
         where.append("EXISTS (SELECT 1 FROM game_grades gg WHERE gg.game_id = g.id"
                      " AND gg.user_id = ? AND gg.grade = ?)")
         params.extend([user["id"], grade])
-    if keep in ("keep", "remove"):
-        where.append("g.keep_flag = ?")
-        params.append(keep)
     if section:
         where.append("g.section = ?")
         params.append(section)
@@ -485,7 +482,7 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
                   pages=max(1, (total + per - 1) // per), sections=sections, grades=GRADES,
                   view=view, rail_counts=rail, letters=RAIL_LETTERS, repacks=REPACKS,
                   show_removed=status == "removed",
-                  f={"q": q, "verified": verified, "grade": grade, "keep": keep,
+                  f={"q": q, "verified": verified, "grade": grade,
                      "section": section, "status": status, "sort": sort, "view": view,
                      "letter": letter,
                      "repack": repack if repack in REPACK_KEYS else ""})
@@ -529,7 +526,7 @@ def game_detail(request: Request, game_id: int, err: str = "", user=Depends(requ
 @app.post("/game/{game_id}")
 def game_update(request: Request, game_id: int, title: str = Form(...),
                 verified: str = Form(""), grade: str = Form(""), playtime: str = Form(""),
-                keep_flag: str = Form(""), notes: str = Form(""),
+                notes: str = Form(""),
                 works: str = Form("yes"), version: str = Form(""),
                 repack: str = Form(""), removed_at: str = Form(""),
                 last_updated: str = Form(""),
@@ -586,7 +583,7 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
              version.strip() or None, appid,
              cover_url.strip() or None, store_url.strip() or None, gone_on,
              now(), game_id))
-        grades.set_grade(conn, game_id, user["id"], grade or None, minutes, keep_flag)
+        grades.set_grade(conn, game_id, user["id"], grade or None, minutes)
         settle_credit(conn, game_id, user["id"],
                       holds_credit(was["verified"], was["broken"]),
                       holds_credit(is_verified, is_broken))
@@ -765,7 +762,7 @@ def game_slate(request: Request, game_id: int, user=Depends(require_user)):
 
 
 @app.post("/game/{game_id}/unslate")
-def game_unslate(request: Request, game_id: int, user=Depends(require_user)):
+def game_unslate(request: Request, game_id: int, user=Depends(require_admin)):
     with db() as conn:
         conn.execute("UPDATE games SET slated_at = NULL, updated_at = ? WHERE id = ?",
                      (now(), game_id))

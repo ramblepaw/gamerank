@@ -20,7 +20,6 @@
         {%- endfor -%}
       </td>
       <td>{{ g.playtime_minutes ~ 'm' if g.playtime_minutes is not none else '—' }}</td>
-      <td>{% if g.keep_flag %}<span class="tag {{ 'ok' if g.keep_flag == 'keep' else 'no' }}">{{ g.keep_flag }}</span>{% else %}&mdash;{% endif %}</td>
       <td style="color:var(--dim)">{{ g.date_added or '—' }}</td>
       {% if show_removed %}<td style="color:var(--dim)">{{ g.removed_at[:10] if g.removed_at else '—' }}</td>{% endif %}
       <td style="color:var(--dim)">{{ g.section or '—' }}</td>

@@ -11,17 +11,16 @@ from .db import now, GRADES
 SEVERITY = {letter: i for i, letter in enumerate(GRADES)}
 
 
-def set_grade(conn, game_id: int, user_id: int, grade: str,
-              minutes, keep_flag: str) -> None:
+def set_grade(conn, game_id: int, user_id: int, grade: str, minutes) -> None:
     stamp = now()
     if grade:
         conn.execute(
             "INSERT INTO game_grades (game_id, user_id, grade, playtime_minutes,"
-            " keep_flag, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
             " ON CONFLICT(game_id, user_id) DO UPDATE SET grade = excluded.grade,"
             " playtime_minutes = excluded.playtime_minutes,"
-            " keep_flag = excluded.keep_flag, updated_at = excluded.updated_at",
-            (game_id, user_id, grade, minutes, keep_flag or None, stamp, stamp))
+            " updated_at = excluded.updated_at",
+            (game_id, user_id, grade, minutes, stamp, stamp))
     else:
         # Clearing your grade removes the row, leaving the other person's to stand.
         conn.execute("DELETE FROM game_grades WHERE game_id = ? AND user_id = ?",
@@ -37,25 +36,19 @@ def recompute(conn, game_id: int) -> None:
     Recently Added.
     """
     rows = conn.execute(
-        "SELECT user_id, grade, playtime_minutes, keep_flag, updated_at"
+        "SELECT user_id, grade, playtime_minutes, updated_at"
         " FROM game_grades WHERE game_id = ? ORDER BY updated_at DESC, user_id",
         (game_id,)).fetchall()
 
     letters = [r["grade"] for r in rows if r["grade"]]
     worst = max(letters, key=lambda g: SEVERITY.get(g, -1)) if letters else None
     minutes = [r["playtime_minutes"] for r in rows if r["playtime_minutes"] is not None]
-    if any(r["keep_flag"] == "remove" for r in rows):
-        keep = "remove"
-    elif any(r["keep_flag"] == "keep" for r in rows):
-        keep = "keep"
-    else:
-        keep = None
     latest = rows[0] if rows else None
 
     conn.execute(
-        "UPDATE games SET grade = ?, playtime_minutes = ?, keep_flag = ?,"
+        "UPDATE games SET grade = ?, playtime_minutes = ?,"
         " graded_by = ?, graded_at = ?, updated_at = ? WHERE id = ?",
-        (worst, max(minutes) if minutes else None, keep,
+        (worst, max(minutes) if minutes else None,
          latest["user_id"] if latest else None,
          latest["updated_at"] if latest else None, now(), game_id))
 
@@ -106,7 +99,6 @@ def panels(conn, game_id: int, viewer=None) -> list:
             "hidden": not (mine or revealed),
             "grade": row["grade"] if row else None,
             "playtime_minutes": row["playtime_minutes"] if row else None,
-            "keep_flag": row["keep_flag"] if row else None,
             "graded_at": row["updated_at"] if row else None,
         })
     return out

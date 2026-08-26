@@ -11,7 +11,7 @@ BASE_HEADER = [
     "Is Verified", "Grade", "Completed", "Badge Eligiblity", "emulator", "Notes",
 ]
 NEW_HEADER = [
-    "Playtime (min)", "Keep/Remove", "Graded By", "Verified By",
+    "Playtime (min)", "Graded By", "Verified By",
     "Broken", "Repack", "Steam AppID", "Status", "Date Removed",
 ]
 HEADER = BASE_HEADER + NEW_HEADER
@@ -81,7 +81,7 @@ def build_rows() -> list:
                 g["grade"] or "", _tf(g["legacy_completed"]), g["legacy_badge"] or "",
                 g["legacy_emulator"] or "", g["notes"] or "",
                 g["playtime_minutes"] if g["playtime_minutes"] is not None else "",
-                g["keep_flag"] or "", users.get(g["graded_by"], ""), users.get(g["verified_by"], ""),
+                users.get(g["graded_by"], ""), users.get(g["verified_by"], ""),
                 _tf(g["broken"]), g["repack"] or "", g["steam_appid"] or "", g["status"],
                 _date_us((g["removed_at"] or "")[:10]),
             ] + [held.get(g["id"], {}).get(uid, "") for uid, _ in seats])
