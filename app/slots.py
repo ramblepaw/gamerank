@@ -84,15 +84,15 @@ def credit_check(conn, game_id=None, user_id=None) -> bool:
         conn.execute("UPDATE slot_state SET check_credit = 0 WHERE id = 1")
         return False
 
+    # Divide rather than subtract once: if the ratio has just been lowered, the
+    # credit carried over from the old one can be worth more than a single slot,
+    # and subtracting once would strand the remainder for good.
     credit = st["check_credit"] + 1
-    if credit >= per:
-        credit -= per
-        conn.execute("UPDATE slot_state SET check_credit = ? WHERE id = 1", (credit,))
-        _apply(conn, +1, "check credit", game_id, user_id)
-        return True
-
+    earned, credit = divmod(credit, per)
     conn.execute("UPDATE slot_state SET check_credit = ? WHERE id = 1", (credit,))
-    return False
+    for _ in range(earned):
+        _apply(conn, +1, "check credit", game_id, user_id)
+    return earned > 0
 
 
 def debit_check(conn, game_id=None, user_id=None) -> bool:

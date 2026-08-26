@@ -1090,6 +1090,12 @@ def admin_settings(request: Request, slot_limit: str = Form(...), checks_per_slo
             set_setting(key, str(max(1, int(value))))
         except ValueError:
             pass
+    # Part-credit carried over from a wider ratio would otherwise sit there
+    # unspendable once the ratio narrows.
+    with db() as conn:
+        per = max(1, int(get_setting_conn(conn, "checks_per_slot", "2")))
+        conn.execute("UPDATE slot_state SET check_credit = MIN(check_credit, ?)"
+                     " WHERE id = 1", (per - 1,))
     return RedirectResponse("/admin", status_code=303)
 
 
