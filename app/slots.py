@@ -4,9 +4,11 @@ Balance starts at the limit (default 50). Adding a game spends one slot.
 Every N checks (default 2) returns one slot. The balance is capped at the
 limit - surplus checks are not banked.
 
-Only a game that actually runs earns credit. A broken one has not left the
-pile of work, and paying for a new game with it would mean the broken ones
-never get dealt with.
+A game holds exactly one check's credit while it is checked and working, and
+none otherwise. Verifying it as broken earns nothing - a broken game has not
+left the pile of work, and paying for a new game with it would mean the broken
+ones never get dealt with - but fixing it later pays that credit, and breaking
+or unchecking a working game takes it back.
 
 Games added pre-tested spend a slot like anything else but earn nothing back,
 because they never joined the unchecked pile in the first place.
@@ -87,6 +89,27 @@ def credit_check(conn, game_id=None, user_id=None) -> bool:
         credit -= per
         conn.execute("UPDATE slot_state SET check_credit = ? WHERE id = 1", (credit,))
         _apply(conn, +1, "check credit", game_id, user_id)
+        return True
+
+    conn.execute("UPDATE slot_state SET check_credit = ? WHERE id = 1", (credit,))
+    return False
+
+
+def debit_check(conn, game_id=None, user_id=None) -> bool:
+    """Take one check's credit back. The exact inverse of credit_check().
+
+    Borrows from the balance when there is no part-credit left to give back, so
+    putting a game back on the unchecked pile costs what checking it paid.
+    Returns True if it cost a whole slot.
+    """
+    st = _state(conn)
+    per = _checks_per_slot(conn)
+
+    credit = st["check_credit"] - 1
+    if credit < 0:
+        credit += per
+        conn.execute("UPDATE slot_state SET check_credit = ? WHERE id = 1", (credit,))
+        _apply(conn, -1, "check undone", game_id, user_id)
         return True
 
     conn.execute("UPDATE slot_state SET check_credit = ? WHERE id = 1", (credit,))

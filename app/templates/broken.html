@@ -27,7 +27,9 @@
     <textarea name="notes" id="bn-{{ g.id }}" style="min-height:44px">{{ g.notes or '' }}</textarea>
 
     <div class="row" style="margin-top:10px;align-items:center;flex-wrap:wrap">
+      {% if user.is_admin %}
       <button class="primary" type="submit" name="action" value="fixed">Fixed</button>
+      {% endif %}
       <button class="bad" type="submit" name="action" value="removed"
               title="Straight off the server and into the archive, not the removal batch">Removed</button>
       <label style="display:flex;gap:7px;align-items:center;font-size:13px">

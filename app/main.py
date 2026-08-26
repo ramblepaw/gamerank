@@ -43,6 +43,24 @@ templates = Jinja2Templates(directory=os.path.join(BASE, "templates"))
 RAIL_LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + ["#"]
 
 
+def holds_credit(verified, broken) -> bool:
+    """A game holds one check's credit exactly while it is checked and working."""
+    return bool(verified) and not broken
+
+
+def settle_credit(conn, game_id, user_id, before: bool, after: bool) -> None:
+    """Pay or take back a check's credit when a game crosses that line.
+
+    Only for the admin routes outside the Verify queue. The queue credits its
+    own submissions, and marking a game updated is priced at a whole slot
+    rather than a check, so neither goes through here.
+    """
+    if after and not before:
+        slots.credit_check(conn, game_id, user_id)
+    elif before and not after:
+        slots.debit_check(conn, game_id, user_id)
+
+
 def section_names(conn) -> list:
     """The category list, in the order the admin page put it."""
     return [r["name"] for r in conn.execute(
@@ -489,7 +507,6 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
     grade = (grade or "").strip().upper()
     if grade and grade not in GRADES:
         raise HTTPException(400, "Unknown grade.")
-        raise HTTPException(400, "Unknown broken status.")
     try:
         minutes = int(playtime) if str(playtime).strip() else None
     except ValueError:
@@ -499,14 +516,23 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
     except ValueError:
         appid = None
 
-    is_verified = 1 if verified == "1" else 0
-    # Nothing unchecked can be known to be broken.
-    is_broken = 1 if (is_verified and works == "no") else 0
-
     if appid and not store_url.strip():
         store_url = metadata.steam_store_url(appid)
 
     with db() as conn:
+        was = conn.execute("SELECT verified, broken FROM games WHERE id = ?",
+                           (game_id,)).fetchone()
+        if not was:
+            raise HTTPException(404, "No such game.")
+
+        if user["is_admin"]:
+            is_verified = 1 if verified == "1" else 0
+            # Nothing unchecked can be known to be broken.
+            is_broken = 1 if (is_verified and works == "no") else 0
+        else:
+            # Checking a game off outside the queue is an admin privilege.
+            is_verified, is_broken = was["verified"], was["broken"]
+
         conn.execute(
             "UPDATE games SET title = ?, title_norm = ?, title_sort = ?, section = ?,"
             " date_added = ?, verified = ?, notes = ?, broken = ?,"
@@ -517,6 +543,9 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
              is_broken, version.strip() or None, appid,
              cover_url.strip() or None, store_url.strip() or None, now(), game_id))
         grades.set_grade(conn, game_id, user["id"], grade or None, minutes, keep_flag)
+        settle_credit(conn, game_id, user["id"],
+                      holds_credit(was["verified"], was["broken"]),
+                      holds_credit(is_verified, is_broken))
         log_audit(conn, game_id, user["id"], "edited", "")
     exporter.export(tag="edit")
     return RedirectResponse("/game/%d" % game_id, status_code=303)
@@ -775,9 +804,13 @@ def broken_action(request: Request, game_id: int, action: str = Form(...),
                          (notes.strip(), now(), game_id))
 
         if action == "fixed":
+            if not user["is_admin"]:
+                raise HTTPException(403, "Only an admin can mark a game fixed.")
             conn.execute(
                 "UPDATE games SET broken = 0, verified = 1, verified_by = ?, verified_at = ?,"
                 " updated_at = ? WHERE id = ?", (user["id"], now(), now(), game_id))
+            settle_credit(conn, game_id, user["id"],
+                          holds_credit(game["verified"], game["broken"]), True)
             log_audit(conn, game_id, user["id"], "fixed", "runs again")
         elif action == "removed":
             conn.execute(

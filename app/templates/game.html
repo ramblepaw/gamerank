@@ -189,6 +189,7 @@
       </div>
 
       <div class="row" style="margin-top:12px">
+        {% if user.is_admin %}
         <div class="grow">
           <label class="lbl" for="verified">Checked</label>
           <select name="verified" id="verified">
@@ -196,6 +197,12 @@
             <option value="0" {{ 'selected' if not g.verified }}>no</option>
           </select>
         </div>
+        {% else %}
+        <div class="grow">
+          <div class="lbl">Checked</div>
+          <div style="padding-top:6px">{{ 'yes' if g.verified else 'no' }}</div>
+        </div>
+        {% endif %}
         <div class="grow">
           <label class="lbl" for="grade">Your grade</label>
           <select name="grade" id="grade">
@@ -226,10 +233,14 @@
       <div class="row" style="margin-top:12px">
         <div class="grow">
           <label class="lbl" for="works">Works</label>
+          {% if user.is_admin %}
           <select name="works" id="works">
             <option value="yes" {{ '' if g.broken else 'selected' }}>yes</option>
             <option value="no" {{ 'selected' if g.broken }}>no &mdash; broken</option>
           </select>
+          {% else %}
+          <div style="padding-top:6px">{{ 'no &mdash; broken' | safe if g.broken else 'yes' }}</div>
+          {% endif %}
         </div>
         <div class="grow">
           <label class="lbl" for="section">Section</label>
