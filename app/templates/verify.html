@@ -29,10 +29,7 @@
 
     <div style="margin-top:12px">
       <label class="lbl">Repack</label>
-      <div class="seg" role="radiogroup" aria-label="Repack">
-        <input type="radio" name="repack" id="rp0-{{ g.id }}" value=""
-               {{ 'checked' if not g.repack }}>
-        <label for="rp0-{{ g.id }}">None</label>
+      <div class="seg optional" role="radiogroup" aria-label="Repack">
         {% for key, label in repacks %}
         <input type="radio" name="repack" id="rp{{ key }}-{{ g.id }}" value="{{ key }}"
                {{ 'checked' if g.repack == key }}>
@@ -52,4 +49,16 @@
   </div>
 </form>
 {% endfor %}
+
+<script>
+// Neither repack picked is the ordinary case, so there is no button for it.
+// Clicking the one that is already on turns it back off, which a radio group
+// will not do by itself.
+document.querySelectorAll('.seg.optional label').forEach(function (lab) {
+  lab.addEventListener('click', function (e) {
+    var input = document.getElementById(lab.htmlFor);
+    if (input && input.checked) { e.preventDefault(); input.checked = false; }
+  });
+});
+</script>
 {% endblock %}

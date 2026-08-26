@@ -27,7 +27,6 @@
       <option value="remove" {{ 'selected' if f.keep == 'remove' }}>remove</option></select></div>
   <div><label class="lbl" for="repack">Repack</label>
     <select name="repack" id="repack"><option value="">any</option>
-      <option value="none" {{ 'selected' if f.repack == 'none' }}>none</option>
       {% for key, label in repacks %}<option value="{{ key }}" {{ 'selected' if f.repack == key }}>{{ label }}</option>{% endfor %}</select></div>
   <div><label class="lbl" for="section">Section</label>
     <select name="section" id="section"><option value="">any</option>

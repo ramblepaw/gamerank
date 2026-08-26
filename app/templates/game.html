@@ -260,7 +260,7 @@
         <div class="grow">
           <label class="lbl" for="repack">Repack</label>
           <select name="repack" id="repack">
-            <option value="">none</option>
+            <option value="">&mdash;</option>
             {% for key, label in repacks %}
             <option value="{{ key }}" {{ 'selected' if g.repack == key }}>{{ label }}</option>
             {% endfor %}

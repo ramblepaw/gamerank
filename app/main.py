@@ -414,9 +414,7 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
     if section:
         where.append("g.section = ?")
         params.append(section)
-    if repack == "none":
-        where.append("COALESCE(g.repack, '') = ''")
-    elif repack in REPACK_KEYS:
+    if repack in REPACK_KEYS:
         where.append("g.repack = ?")
         params.append(repack)
     if status == "slated":
@@ -487,7 +485,7 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
                   f={"q": q, "verified": verified, "grade": grade, "keep": keep,
                      "section": section, "status": status, "sort": sort, "view": view,
                      "letter": letter,
-                     "repack": repack if repack in REPACK_KEYS or repack == "none" else ""})
+                     "repack": repack if repack in REPACK_KEYS else ""})
 
 
 @app.get("/recent", response_class=HTMLResponse)
