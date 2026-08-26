@@ -300,6 +300,9 @@ h2 {
 }
 .tile { position: relative; }
 .tile .artlink { position: absolute; inset: 0; z-index: 1; }
+/* Covers are stretched to the 2:3 frame - object-fit: fill, not cover. An
+   odd-shaped source comes out distorted rather than cropped, because losing
+   part of the art is worse than the whole of it being slightly off. */
 .tile .art {
   position: relative; aspect-ratio: 2 / 3; overflow: hidden;
   background: linear-gradient(160deg, var(--panel-2), var(--sunk));
@@ -308,7 +311,7 @@ h2 {
   transition: transform .24s cubic-bezier(.2, .8, .2, 1),
               box-shadow .24s ease, border-color .2s ease;
 }
-.tile .art img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s ease; }
+.tile .art img { width: 100%; height: 100%; object-fit: fill; transition: transform .5s ease; }
 .tile .art::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(to top, rgba(0, 0, 0, .55), transparent 42%);
@@ -376,7 +379,7 @@ a.name:hover { text-decoration: none; }
   background: linear-gradient(160deg, var(--panel-2), var(--sunk));
   border: 1px solid var(--line-2);
 }
-.qcard .shot img { width: 100%; height: 100%; object-fit: cover; }
+.qcard .shot img { width: 100%; height: 100%; object-fit: fill; }
 .qcard .body { flex: 1; min-width: 0; }
 .qcard h3 { margin: 0 0 3px; font-size: 19px; font-weight: 600; }
 .qmeta {
@@ -521,7 +524,7 @@ tbody tr { transition: background .16s ease; }
 tbody tr:nth-child(odd) { background: color-mix(in srgb, var(--panel) 45%, transparent); }
 tbody tr:hover { background: var(--glow); }
 td.thumb { padding: 3px 0 3px 9px; width: 34px; }
-td.thumb img { width: 34px; height: 51px; object-fit: cover; }
+td.thumb img { width: 34px; height: 51px; object-fit: fill; }
 
 .tag {
   display: inline-block; padding: 1px 7px; font-size: 10px; font-weight: 700;
@@ -582,9 +585,7 @@ pre.out {
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 .split3 .art { position: relative; }
-/* A cover pasted in as a URL is whatever shape the source happens to be. Fill
-   the frame with it the way the grid does, instead of leaving dead space. */
-.split3 .art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.split3 .art img { display: block; width: 100%; height: 100%; object-fit: fill; }
 
 /* Compact density trims the padding, nothing else. */
 [data-density="compact"] th,

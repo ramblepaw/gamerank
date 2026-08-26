@@ -496,11 +496,11 @@ COVER_W, COVER_H = 600, 900
 
 
 def _to_cover(data: bytes) -> bytes:
-    """Normalise an upload to one 600x900 JPEG that fills the frame.
+    """Normalise an upload to one 600x900 JPEG.
 
-    Always scaled to cover and centre-cropped, whatever shape it started as.
-    No padding: a cover with bars down the side reads as broken rather than as
-    a deliberate fit.
+    Stretched or squashed to the frame, never cropped and never padded. An odd
+    shape comes out distorted, which is the trade: losing part of the art is
+    worse than the whole of it being slightly off.
     """
     from PIL import Image, ImageOps
 
@@ -509,7 +509,7 @@ def _to_cover(data: bytes) -> bytes:
     if src.mode not in ("RGB", "L"):
         src = src.convert("RGB")
 
-    out = ImageOps.fit(src, (COVER_W, COVER_H), method=Image.LANCZOS, centering=(0.5, 0.5))
+    out = src.resize((COVER_W, COVER_H), Image.LANCZOS)
     buf = io.BytesIO()
     out.convert("RGB").save(buf, "JPEG", quality=88, optimize=True)
     return buf.getvalue()
