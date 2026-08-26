@@ -756,11 +756,15 @@ def broken_list(request: Request, user=Depends(require_user)):
 
 @app.post("/broken/{game_id}")
 def broken_action(request: Request, game_id: int, action: str = Form(...),
-                  notes: str = Form(""), user=Depends(require_user)):
-    """A broken game has two ways out: it gets fixed, or it goes.
+                  notes: str = Form(""), wishlist: str = Form(""),
+                  user=Depends(require_user)):
+    """Fixed, or gone.
 
-    No status in between. Nobody is waiting on anybody, so a stage to move it
-    through would only be a record of having looked at it.
+    Removing here is the removal itself rather than a nomination: a broken game
+    goes straight to the archive instead of joining the batch, which is for
+    culling games that work. A replacement copy never comes back through this
+    page - it is checked before it reaches the server, so it arrives as a
+    working game like any other.
     """
     with db() as conn:
         game = conn.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
@@ -775,29 +779,22 @@ def broken_action(request: Request, game_id: int, action: str = Form(...),
                 "UPDATE games SET broken = 0, verified = 1, verified_by = ?, verified_at = ?,"
                 " updated_at = ? WHERE id = ?", (user["id"], now(), now(), game_id))
             log_audit(conn, game_id, user["id"], "fixed", "runs again")
-        elif action == "recheck":
-            # A replacement copy is a different build, so it owes a check.
+        elif action == "removed":
             conn.execute(
-                "UPDATE games SET broken = 0, verified = 0, verified_by = NULL,"
-                " verified_at = NULL, last_updated = ?, updated_at = ? WHERE id = ?",
-                (today(), now(), game_id))
-            log_audit(conn, game_id, user["id"], "replaced", "back to verify")
-        elif action in ("slate", "slate_wishlist"):
-            conn.execute("UPDATE games SET slated_at = ?, updated_at = ? WHERE id = ?",
-                         (now(), now(), game_id))
-            log_audit(conn, game_id, user["id"], "slated", "broken")
-            if action == "slate_wishlist":
-                held = conn.execute("SELECT 1 FROM wishlist WHERE title_norm = ?",
-                                    (game["title_norm"],)).fetchone()
-                if not held:
-                    conn.execute(
-                        "INSERT INTO wishlist (title, title_norm, steam_appid, store_url,"
-                        " cover_url, notes, added_by, created_at, updated_at)"
-                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (game["title"], game["title_norm"], game["steam_appid"],
-                         game["store_url"], game["cover_url"], "Broken copy removed",
-                         user["id"], now(), now()))
-                    log_audit(conn, game_id, user["id"], "wishlisted", "need a working copy")
+                "UPDATE games SET status = 'removed', removed_at = ?, slated_at = NULL,"
+                " updated_at = ? WHERE id = ?", (now(), now(), game_id))
+            log_audit(conn, game_id, user["id"], "removed", "broken")
+            if wishlist == "1" and not conn.execute(
+                    "SELECT 1 FROM wishlist WHERE title_norm = ?",
+                    (game["title_norm"],)).fetchone():
+                conn.execute(
+                    "INSERT INTO wishlist (title, title_norm, steam_appid, store_url,"
+                    " cover_url, notes, added_by, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (game["title"], game["title_norm"], game["steam_appid"],
+                     game["store_url"], game["cover_url"], "Broken copy removed",
+                     user["id"], now(), now()))
+                log_audit(conn, game_id, user["id"], "wishlisted", "want a working copy")
         else:
             raise HTTPException(400, "Unknown action.")
     exporter.export(tag="broken")

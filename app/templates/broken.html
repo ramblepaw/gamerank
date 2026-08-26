@@ -6,8 +6,8 @@
 
 <h1>Broken</h1>
 <p class="sub">
-  {{ games | length }} not running. Each one is fixed or it goes &mdash; a broken
-  game holds its slot until then.
+  {{ games | length }} not running. Either it gets fixed or it goes &mdash; and a
+  broken game holds its slot until it does.
 </p>
 
 {% if not games %}<div class="empty">Nothing broken.</div>{% endif %}
@@ -26,15 +26,14 @@
     <label class="lbl" for="bn-{{ g.id }}">Notes</label>
     <textarea name="notes" id="bn-{{ g.id }}" style="min-height:44px">{{ g.notes or '' }}</textarea>
 
-    <div class="row" style="margin-top:10px;flex-wrap:wrap">
-      <button class="primary" type="submit" name="action" value="fixed"
-              title="It runs now">Fixed</button>
-      <button type="submit" name="action" value="recheck"
-              title="A different copy is on the server; it needs checking again">Replaced &mdash; recheck</button>
-      <button class="bad" type="submit" name="action" value="slate"
-              title="Add to the removal batch">Slate</button>
-      <button class="bad" type="submit" name="action" value="slate_wishlist"
-              title="Add to the removal batch and note that a working copy is wanted">Slate &amp; wishlist</button>
+    <div class="row" style="margin-top:10px;align-items:center;flex-wrap:wrap">
+      <button class="primary" type="submit" name="action" value="fixed">Fixed</button>
+      <button class="bad" type="submit" name="action" value="removed"
+              title="Straight off the server and into the archive, not the removal batch">Removed</button>
+      <label style="display:flex;gap:7px;align-items:center;font-size:13px">
+        <input type="checkbox" name="wishlist" value="1" style="width:auto">
+        Wishlist it
+      </label>
     </div>
   </div>
 </form>

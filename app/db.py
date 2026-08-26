@@ -49,7 +49,6 @@ CREATE TABLE IF NOT EXISTS games (
     pre_tested        INTEGER NOT NULL DEFAULT 0,
 
     broken            INTEGER NOT NULL DEFAULT 0,
-    broken_status     TEXT,
 
     grade             TEXT,
     graded_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -421,6 +420,13 @@ def backfill(conn) -> None:
             conn.execute(
                 "INSERT OR IGNORE INTO sections (name, position, created_at) VALUES (?, ?, ?)",
                 (name, pos, now()))
+
+    # Broken was briefly a set of ticket stages. It is a yes or no.
+    if "broken_status" in _columns(conn, "games"):
+        try:
+            conn.execute("ALTER TABLE games DROP COLUMN broken_status")
+        except sqlite3.OperationalError:
+            pass                              # SQLite older than 3.35
 
     # The first two accounts take the two grade columns; admin can swap them.
     held = conn.execute(
