@@ -4,8 +4,9 @@ Balance starts at the limit (default 50). Adding a game spends one slot.
 Every N checks (default 2) returns one slot. The balance is capped at the
 limit - surplus checks are not banked.
 
-A "check" is any resolved verification, working or broken. The credit is for
-shrinking the unchecked pile, not for the outcome.
+Only a game that actually runs earns credit. A broken one has not left the
+pile of work, and paying for a new game with it would mean the broken ones
+never get dealt with.
 
 Games added pre-tested spend a slot like anything else but earn nothing back,
 because they never joined the unchecked pile in the first place.

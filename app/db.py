@@ -14,7 +14,6 @@ DB_PATH = os.path.join(DATA_DIR, "gamerank.db")
 EXPORT_DIR = os.path.join(DATA_DIR, "exports")
 
 GRADES = ["S", "A", "B", "C", "D"]
-BROKEN_STATUSES = ["unaddressed", "investigating", "fixed_recheck", "unfixable"]
 GAME_STATUSES = ["active", "removed"]
 
 # Date the first game went on the server. Used when a row has no date.

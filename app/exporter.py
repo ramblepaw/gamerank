@@ -12,7 +12,7 @@ BASE_HEADER = [
 ]
 NEW_HEADER = [
     "Playtime (min)", "Keep/Remove", "Graded By", "Verified By",
-    "Broken Status", "Steam AppID", "Status",
+    "Broken", "Steam AppID", "Status",
 ]
 HEADER = BASE_HEADER + NEW_HEADER
 
@@ -82,7 +82,7 @@ def build_rows() -> list:
                 g["legacy_emulator"] or "", g["notes"] or "",
                 g["playtime_minutes"] if g["playtime_minutes"] is not None else "",
                 g["keep_flag"] or "", users.get(g["graded_by"], ""), users.get(g["verified_by"], ""),
-                g["broken_status"] or "", g["steam_appid"] or "", g["status"],
+                _tf(g["broken"]), g["steam_appid"] or "", g["status"],
             ] + [held.get(g["id"], {}).get(uid, "") for uid, _ in seats])
     return rows
 

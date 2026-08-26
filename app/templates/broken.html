@@ -1,12 +1,14 @@
 {% extends "base.html" %}
-{% from "macros.html" import art %}
+{% from "macros.html" import art, steamlink %}
 {% set nav = 'broken' %}
 {% block title %}Broken &middot; GameRank{% endblock %}
 {% block body %}
 
 <h1>Broken</h1>
-<p class="sub">{{ games | length }} listed &middot;
-  <a href="/broken?show={{ 'all' if show == 'open' else 'open' }}">{{ 'show unfixable' if show == 'open' else 'hide unfixable' }}</a></p>
+<p class="sub">
+  {{ games | length }} not running. Each one is fixed or it goes &mdash; a broken
+  game holds its slot until then.
+</p>
 
 {% if not games %}<div class="empty">Nothing broken.</div>{% endif %}
 
@@ -16,24 +18,24 @@
   <div class="body">
     <h3><a href="/game/{{ g.id }}">{{ g.title }}</a></h3>
     <div class="qmeta">
-      <span class="tag {{ 'no' if g.broken_status == 'unfixable' else 'warn' }}">{{ (g.broken_status or 'unaddressed').replace('_', ' ') }}</span>
-      {% if g.verifier %}<span>{{ g.verifier }}</span>{% endif %}
+      {% if g.section %}<span>{{ g.section }}</span>{% endif %}
+      {% if g.verifier %}<span>found by {{ g.verifier }}</span>{% endif %}
+      {% if g.store_url %}<span>{{ steamlink(g) }}</span>{% endif %}
     </div>
-    <div class="row">
-      <div class="grow">
-        <label class="lbl" for="bs-{{ g.id }}">Status</label>
-        <select name="broken_status" id="bs-{{ g.id }}">
-          {% for s in broken_statuses %}
-          <option value="{{ s }}" {{ 'selected' if g.broken_status == s }}>{% if s == 'fixed_recheck' %}fixed - recheck{% else %}{{ s.replace('_', ' ') }}{% endif %}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="grow" style="flex:3">
-        <label class="lbl" for="bn-{{ g.id }}">Notes</label>
-        <textarea name="notes" id="bn-{{ g.id }}" style="min-height:44px">{{ g.notes or '' }}</textarea>
-      </div>
+
+    <label class="lbl" for="bn-{{ g.id }}">Notes</label>
+    <textarea name="notes" id="bn-{{ g.id }}" style="min-height:44px">{{ g.notes or '' }}</textarea>
+
+    <div class="row" style="margin-top:10px;flex-wrap:wrap">
+      <button class="primary" type="submit" name="action" value="fixed"
+              title="It runs now">Fixed</button>
+      <button type="submit" name="action" value="recheck"
+              title="A different copy is on the server; it needs checking again">Replaced &mdash; recheck</button>
+      <button class="bad" type="submit" name="action" value="slate"
+              title="Add to the removal batch">Slate</button>
+      <button class="bad" type="submit" name="action" value="slate_wishlist"
+              title="Add to the removal batch and note that a working copy is wanted">Slate &amp; wishlist</button>
     </div>
-    <div class="row" style="margin-top:10px"><button class="primary" type="submit">Update</button></div>
   </div>
 </form>
 {% endfor %}

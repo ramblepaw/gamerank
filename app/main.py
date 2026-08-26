@@ -15,7 +15,7 @@ from itsdangerous import URLSafeSerializer, BadSignature
 from . import slots, queues, exporter, importer, metadata, paste, jobs, themes, grades
 from .db import (
     db, init_db, now, today, norm_title, sort_title, log_audit, get_setting_conn, set_setting,
-    hash_password, verify_password, GRADES, BROKEN_STATUSES, EXPORT_DIR, FALLBACK_DATE, DATA_DIR,
+    hash_password, verify_password, GRADES, EXPORT_DIR, FALLBACK_DATE, DATA_DIR,
     THEMES, ACCENTS, DENSITIES, TILE_SIZES, THEME_TOKENS, DEFAULT_THEME,
 )
 
@@ -180,8 +180,8 @@ def render(request: Request, template: str, **ctx):
     with db() as conn:
         ctx["slots"] = slots.status(conn)
         ctx["broken_count"] = conn.execute(
-            "SELECT COUNT(*) AS n FROM games WHERE broken = 1 AND status = 'active'"
-            " AND COALESCE(broken_status, '') != 'unfixable'").fetchone()["n"]
+            "SELECT COUNT(*) AS n FROM games WHERE broken = 1"
+            " AND status = 'active'").fetchone()["n"]
         ctx["no_art_count"] = conn.execute(
             "SELECT COUNT(*) AS n FROM games WHERE status = 'active'"
             " AND (cover_url IS NULL OR cover_url = '')").fetchone()["n"]
@@ -277,10 +277,11 @@ def verify_submit(request: Request, game_id: int, works: str = Form(...),
 
         conn.execute(
             "UPDATE games SET verified = 1, verified_by = ?, verified_at = ?,"
-            " broken = ?, broken_status = ?, notes = ?, updated_at = ? WHERE id = ?",
-            (user["id"], now(), 0 if ok else 1, None if ok else "unaddressed",
+            " broken = ?, notes = ?, updated_at = ? WHERE id = ?",
+            (user["id"], now(), 0 if ok else 1,
              notes.strip() or game["notes"], now(), game_id))
-        slots.credit_check(conn, game_id, user["id"])
+        if ok:
+            slots.credit_check(conn, game_id, user["id"])
         log_audit(conn, game_id, user["id"], "verified", "works" if ok else "broken")
         queues.clear_slot(conn, user["id"], queues.VERIFY, game_id)
         queues.refill(conn, user["id"], queues.VERIFY)
@@ -472,7 +473,7 @@ def game_detail(request: Request, game_id: int, err: str = "", user=Depends(requ
         mine = grades.for_game(conn, game_id).get(user["id"])
         sections = section_names(conn)
     return render(request, "game.html", user=user, g=dict(row), history=history, err=err,
-                  grades=GRADES, broken_statuses=BROKEN_STATUSES, panels=panels,
+                  grades=GRADES, panels=panels,
                   mine=dict(mine) if mine else None, sections=sections,
                   igdb=metadata.igdb_available())
 
@@ -481,14 +482,13 @@ def game_detail(request: Request, game_id: int, err: str = "", user=Depends(requ
 def game_update(request: Request, game_id: int, title: str = Form(...),
                 verified: str = Form(""), grade: str = Form(""), playtime: str = Form(""),
                 keep_flag: str = Form(""), notes: str = Form(""),
-                broken_status: str = Form(""), version: str = Form(""),
+                works: str = Form("yes"), version: str = Form(""),
                 section: str = Form(""), date_added: str = Form(""),
                 steam_appid: str = Form(""), cover_url: str = Form(""),
                 store_url: str = Form(""), user=Depends(require_user)):
     grade = (grade or "").strip().upper()
     if grade and grade not in GRADES:
         raise HTTPException(400, "Unknown grade.")
-    if broken_status and broken_status not in BROKEN_STATUSES:
         raise HTTPException(400, "Unknown broken status.")
     try:
         minutes = int(playtime) if str(playtime).strip() else None
@@ -500,10 +500,8 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
         appid = None
 
     is_verified = 1 if verified == "1" else 0
-    is_broken = 1 if broken_status and broken_status != "fixed_recheck" else 0
-    if broken_status == "fixed_recheck":
-        is_verified = 0
-        broken_status = ""
+    # Nothing unchecked can be known to be broken.
+    is_broken = 1 if (is_verified and works == "no") else 0
 
     if appid and not store_url.strip():
         store_url = metadata.steam_store_url(appid)
@@ -511,12 +509,12 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
     with db() as conn:
         conn.execute(
             "UPDATE games SET title = ?, title_norm = ?, title_sort = ?, section = ?,"
-            " date_added = ?, verified = ?, notes = ?, broken = ?, broken_status = ?,"
+            " date_added = ?, verified = ?, notes = ?, broken = ?,"
             " version = ?, steam_appid = ?, cover_url = ?, store_url = ?, updated_at = ?"
             " WHERE id = ?",
             (title.strip(), norm_title(title), sort_title(title), section.strip() or None,
              date_added.strip() or FALLBACK_DATE, is_verified, notes.strip() or None,
-             is_broken, broken_status or None, version.strip() or None, appid,
+             is_broken, version.strip() or None, appid,
              cover_url.strip() or None, store_url.strip() or None, now(), game_id))
         grades.set_grade(conn, game_id, user["id"], grade or None, minutes, keep_flag)
         log_audit(conn, game_id, user["id"], "edited", "")
@@ -746,42 +744,64 @@ def game_delete(request: Request, game_id: int, confirm: str = Form(""),
 # ------------------------------------------------------------------------- broken
 
 @app.get("/broken", response_class=HTMLResponse)
-def broken_list(request: Request, show: str = "open", user=Depends(require_user)):
-    clause = "broken = 1 AND status = 'active'"
-    if show == "open":
-        clause += " AND COALESCE(broken_status, '') != 'unfixable'"
+def broken_list(request: Request, user=Depends(require_user)):
     with db() as conn:
         rows = [dict(r) for r in conn.execute(
             "SELECT g.*, u.username AS verifier FROM games g"
             " LEFT JOIN users u ON u.id = g.verified_by"
-            " WHERE " + clause + " ORDER BY g.broken_status, g.title COLLATE NOCASE")]
-    return render(request, "broken.html", user=user, games=rows, show=show,
-                  broken_statuses=BROKEN_STATUSES)
+            " WHERE g.broken = 1 AND g.status = 'active' ORDER BY g.title_sort")]
+        grades.attach(conn, rows, user)
+    return render(request, "broken.html", user=user, games=rows)
 
 
 @app.post("/broken/{game_id}")
-def broken_update(request: Request, game_id: int, broken_status: str = Form(...),
+def broken_action(request: Request, game_id: int, action: str = Form(...),
                   notes: str = Form(""), user=Depends(require_user)):
-    if broken_status not in BROKEN_STATUSES:
-        raise HTTPException(400, "Unknown status.")
+    """A broken game has two ways out: it gets fixed, or it goes.
+
+    No status in between. Nobody is waiting on anybody, so a stage to move it
+    through would only be a record of having looked at it.
+    """
     with db() as conn:
-        game = conn.execute("SELECT notes FROM games WHERE id = ?", (game_id,)).fetchone()
+        game = conn.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
         if not game:
             raise HTTPException(404, "No such game.")
-        if broken_status == "fixed_recheck":
+        if notes.strip():
+            conn.execute("UPDATE games SET notes = ?, updated_at = ? WHERE id = ?",
+                         (notes.strip(), now(), game_id))
+
+        if action == "fixed":
             conn.execute(
-                "UPDATE games SET broken = 0, broken_status = NULL, notes = ?, verified = 0,"
-                " verified_by = NULL, verified_at = NULL, updated_at = ?"
-                " WHERE id = ?", (notes.strip() or game["notes"], now(), game_id))
-            log_audit(conn, game_id, user["id"], "fixed", "back to verify")
+                "UPDATE games SET broken = 0, verified = 1, verified_by = ?, verified_at = ?,"
+                " updated_at = ? WHERE id = ?", (user["id"], now(), now(), game_id))
+            log_audit(conn, game_id, user["id"], "fixed", "runs again")
+        elif action == "recheck":
+            # A replacement copy is a different build, so it owes a check.
+            conn.execute(
+                "UPDATE games SET broken = 0, verified = 0, verified_by = NULL,"
+                " verified_at = NULL, last_updated = ?, updated_at = ? WHERE id = ?",
+                (today(), now(), game_id))
+            log_audit(conn, game_id, user["id"], "replaced", "back to verify")
+        elif action in ("slate", "slate_wishlist"):
+            conn.execute("UPDATE games SET slated_at = ?, updated_at = ? WHERE id = ?",
+                         (now(), now(), game_id))
+            log_audit(conn, game_id, user["id"], "slated", "broken")
+            if action == "slate_wishlist":
+                held = conn.execute("SELECT 1 FROM wishlist WHERE title_norm = ?",
+                                    (game["title_norm"],)).fetchone()
+                if not held:
+                    conn.execute(
+                        "INSERT INTO wishlist (title, title_norm, steam_appid, store_url,"
+                        " cover_url, notes, added_by, created_at, updated_at)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (game["title"], game["title_norm"], game["steam_appid"],
+                         game["store_url"], game["cover_url"], "Broken copy removed",
+                         user["id"], now(), now()))
+                    log_audit(conn, game_id, user["id"], "wishlisted", "need a working copy")
         else:
-            conn.execute(
-                "UPDATE games SET broken_status = ?, notes = ?, updated_at = ?"
-                " WHERE id = ?", (broken_status, notes.strip() or game["notes"],
-                                  now(), game_id))
-            log_audit(conn, game_id, user["id"], "broken", broken_status)
+            raise HTTPException(400, "Unknown action.")
     exporter.export(tag="broken")
-    return RedirectResponse("/broken", status_code=303)
+    return RedirectResponse(_back_to(request, "/broken"), status_code=303)
 
 
 # ------------------------------------------------------------------------ removal
@@ -850,7 +870,7 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
         """
         conn.execute(
             "UPDATE games SET verified = 0, verified_by = NULL, verified_at = NULL,"
-            " broken = 0, broken_status = NULL, last_updated = ?, updated_at = ?"
+            " broken = 0, last_updated = ?, updated_at = ?"
             " WHERE id = ?", (today(), now(), game_id))
         slots.spend(conn, game_id, user["id"], "updated")
         log_audit(conn, game_id, user["id"], "updated", "new build, back to unverified")

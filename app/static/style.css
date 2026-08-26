@@ -363,6 +363,25 @@ a.name:hover { text-decoration: none; }
   background: linear-gradient(150deg, rgba(0, 0, 0, .82), rgba(0, 0, 0, .58));
   backdrop-filter: blur(2px);
 }
+/* Status at a glance: a green tick runs, a red cross has not been checked,
+   a yellow dash is broken. Faster to scan down a grid than three words. */
+.mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; font-size: 12px; font-weight: 700; line-height: 1;
+  background: linear-gradient(150deg, rgba(0, 0, 0, .82), rgba(0, 0, 0, .6));
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.mark.ok     { color: #5fbf7a; }
+.mark.no     { color: #e06a6a; }
+.mark.broken { color: #e0b23a; font-size: 15px; }
+
+/* The needs-art count sits next to the broken count; keeping both red made
+   one number out of two. */
+.badge.quiet {
+  background: linear-gradient(160deg, var(--line-2), var(--sunk));
+  color: var(--text);
+}
+
 .flagrow { position: absolute; left: 0; bottom: 0; display: flex; gap: 1px; z-index: 2; }
 .flagrow span {
   font-size: 9px; padding: 3px 6px; border: none;

@@ -10,7 +10,7 @@
   #{{ g.id }}
   {% if g.verified %}<span class="tag ok">checked{% if g.verifier %} &middot; {{ g.verifier }}{% endif %}</span>
   {% else %}<span class="tag dim">unchecked</span>{% endif %}
-  {% if g.broken %}<span class="tag no">{{ (g.broken_status or 'broken').replace('_', ' ') }}</span>{% endif %}
+  {% if g.broken %}<span class="tag no">broken</span>{% endif %}
   {% if g.slated_at %}<span class="tag no">slated for removal</span>{% endif %}
   {% if g.status == 'removed' %}<span class="tag warn">removed</span>{% endif %}
   {% if g.store_url %}&middot; <a href="{{ g.store_url }}" target="_blank" rel="noopener">Store page</a>{% endif %}
@@ -113,7 +113,7 @@
         <div class="grow">
           <div class="lbl">Works</div>
           {% if not g.verified %}<span class="sub">not checked yet</span>
-          {% elif g.broken %}<span class="tag no">{{ (g.broken_status or 'broken').replace('_', ' ') }}</span>
+          {% elif g.broken %}<span class="tag no">broken</span>
           {% else %}<span class="tag ok">yes</span>{% endif %}
         </div>
         <div class="grow">
@@ -225,12 +225,10 @@
 
       <div class="row" style="margin-top:12px">
         <div class="grow">
-          <label class="lbl" for="broken_status">Broken status</label>
-          <select name="broken_status" id="broken_status">
-            <option value="">not broken</option>
-            {% for s in broken_statuses %}
-            <option value="{{ s }}" {{ 'selected' if g.broken_status == s }}>{% if s == 'fixed_recheck' %}fixed - recheck{% else %}{{ s.replace('_', ' ') }}{% endif %}</option>
-            {% endfor %}
+          <label class="lbl" for="works">Works</label>
+          <select name="works" id="works">
+            <option value="yes" {{ '' if g.broken else 'selected' }}>yes</option>
+            <option value="no" {{ 'selected' if g.broken }}>no &mdash; broken</option>
           </select>
         </div>
         <div class="grow">
