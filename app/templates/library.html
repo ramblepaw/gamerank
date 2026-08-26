@@ -25,6 +25,10 @@
     <select name="keep" id="keep"><option value="">any</option>
       <option value="keep" {{ 'selected' if f.keep == 'keep' }}>keep</option>
       <option value="remove" {{ 'selected' if f.keep == 'remove' }}>remove</option></select></div>
+  <div><label class="lbl" for="repack">Repack</label>
+    <select name="repack" id="repack"><option value="">any</option>
+      <option value="none" {{ 'selected' if f.repack == 'none' }}>none</option>
+      {% for key, label in repacks %}<option value="{{ key }}" {{ 'selected' if f.repack == key }}>{{ label }}</option>{% endfor %}</select></div>
   <div><label class="lbl" for="section">Section</label>
     <select name="section" id="section"><option value="">any</option>
       {% for s in sections %}<option value="{{ s }}" {{ 'selected' if f.section == s }}>{{ s }}</option>{% endfor %}</select></div>
@@ -43,14 +47,14 @@
   <div><button class="primary" type="submit" id="applybtn">Apply</button></div>
 </form>
 
-{% set active = f.q or f.verified or f.grade or f.keep or f.section or f.letter or f.sort != 'title' or f.status != 'active' %}
-{% set base = 'q=' ~ f.q ~ '&verified=' ~ f.verified ~ '&grade=' ~ f.grade ~ '&keep=' ~ f.keep ~ '&section=' ~ f.section ~ '&status=' ~ f.status ~ '&sort=' ~ f.sort %}
+{% set active = f.q or f.verified or f.grade or f.keep or f.section or f.letter or f.repack or f.sort != 'title' or f.status != 'active' %}
+{% set base = 'q=' ~ f.q ~ '&verified=' ~ f.verified ~ '&grade=' ~ f.grade ~ '&keep=' ~ f.keep ~ '&section=' ~ f.section ~ '&repack=' ~ f.repack ~ '&status=' ~ f.status ~ '&sort=' ~ f.sort %}
 {% set qs = base ~ '&letter=' ~ f.letter %}
 <p class="sub">
   <a href="/library?{{ qs }}&view={{ 'list' if view == 'grid' else 'grid' }}">{{ 'list view' if view == 'grid' else 'grid view' }}</a>
   &middot; <a href="/export.txt?scope=all&fmt=markdown&n=3000" target="_blank">text list</a>
   {% if active %}
-  &middot; <a href="/library?status=active&sort=title&letter=&view={{ view }}">clear filters</a>
+  &middot; <a href="/library?status=active&sort=title&letter=&repack=&view={{ view }}">clear filters</a>
   <span class="tag warn" style="margin-left:4px">filtered</span>
   {% endif %}
 </p>

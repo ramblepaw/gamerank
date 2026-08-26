@@ -373,10 +373,11 @@ def grade_submit(request: Request, game_id: int, grade: str = Form(""),
 def library(request: Request, q: str = "", verified: str = "", grade: str = "",
             keep: str = "", section: str = "", status: str = "active",
             sort: str = "title", view: str = "grid", page: int = 1,
-            letter: str = "", partial: int = 0, user=Depends(require_user)):
+            letter: str = "", repack: str = "", partial: int = 0,
+            user=Depends(require_user)):
     current = {"q": q, "verified": verified, "grade": grade, "keep": keep,
                "section": section, "status": status, "sort": sort, "view": view,
-               "letter": letter}
+               "letter": letter, "repack": repack}
 
     # A bare visit - from the nav or a breadcrumb - resumes the last filters.
     # It has to redirect rather than just apply them, because the scroller
@@ -413,6 +414,11 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
     if section:
         where.append("g.section = ?")
         params.append(section)
+    if repack == "none":
+        where.append("COALESCE(g.repack, '') = ''")
+    elif repack in REPACK_KEYS:
+        where.append("g.repack = ?")
+        params.append(repack)
     if status == "slated":
         where.append("g.status = 'active' AND g.slated_at IS NOT NULL")
     elif status in ("active", "removed"):
@@ -477,10 +483,11 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
 
     return render(request, "library.html", user=user, games=rows, total=total, page=page,
                   pages=max(1, (total + per - 1) // per), sections=sections, grades=GRADES,
-                  view=view, rail_counts=rail, letters=RAIL_LETTERS,
+                  view=view, rail_counts=rail, letters=RAIL_LETTERS, repacks=REPACKS,
                   f={"q": q, "verified": verified, "grade": grade, "keep": keep,
                      "section": section, "status": status, "sort": sort, "view": view,
-                     "letter": letter})
+                     "letter": letter,
+                     "repack": repack if repack in REPACK_KEYS or repack == "none" else ""})
 
 
 @app.get("/recent", response_class=HTMLResponse)
