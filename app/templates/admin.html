@@ -8,7 +8,7 @@
 <div class="split">
   <div>
     <h2>Import masterlist</h2>
-    <form class="card grain" method="post" action="/admin/import" enctype="multipart/form-data">
+    <form class="card grain" method="post" action="/admin/import" enctype="multipart/form-data" autocomplete="off" data-form-type="other">
       <label class="lbl" for="file">Google Sheets CSV</label>
       <input type="file" name="file" id="file" accept=".csv" required>
       <div style="height:10px"></div>
@@ -37,7 +37,7 @@
           <span id="jobfound">{{ job.found }}</span> matched &middot;
           <span id="jobcurrent" style="opacity:.75"></span>
         </p>
-        <form method="post" action="/admin/covers/stop" style="margin-top:10px">
+        <form method="post" action="/admin/covers/stop" style="margin-top:10px" autocomplete="off" data-form-type="other">
           <button class="bad" type="submit">Stop</button>
         </form>
       </div>
@@ -48,7 +48,7 @@
           Last run matched {{ job.found }} of {{ job.done }}.
         </p>
         {% endif %}
-        <form method="post" action="/admin/covers">
+        <form method="post" action="/admin/covers" autocomplete="off" data-form-type="other">
           <div class="row">
             <select name="scope" style="width:auto;flex:1">
               <option value="missing">Only games with no art ({{ no_cover }})</option>
@@ -74,7 +74,7 @@
       </div>
     </div>
     <div class="row" style="margin-top:8px">
-      <form method="post" action="/admin/igdb-test">
+      <form method="post" action="/admin/igdb-test" autocomplete="off" data-form-type="other">
         <button type="submit">Test IGDB connection</button>
       </form>
       <a class="btn" href="/needs-art">Needs art worklist</a>
@@ -103,7 +103,7 @@
     </script>
 
     <h2>Settings</h2>
-    <form class="card grain" method="post" action="/admin/settings">
+    <form class="card grain" method="post" action="/admin/settings" autocomplete="off" data-form-type="other">
       <div class="row">
         <div class="grow"><label class="lbl" for="slot_limit">Slot limit</label>
           <input type="number" min="1" name="slot_limit" id="slot_limit" value="{{ settings.get('slot_limit', '50') }}"></div>
@@ -162,7 +162,7 @@
             <td>{{ sec.name }}</td>
             <td>{{ sec.games }}</td>
             <td style="white-space:nowrap">
-              <form method="post" action="/admin/sections" style="display:inline">
+              <form method="post" action="/admin/sections" style="display:inline" autocomplete="off" data-form-type="other">
                 <input type="hidden" name="name" value="{{ sec.name }}">
                 <button class="sm" type="submit" name="action" value="up"
                         {{ 'disabled' if loop.first }} title="Move up">&uarr;</button>
@@ -171,13 +171,13 @@
               </form>
               <form method="post" action="/admin/sections" style="display:inline"
                     onsubmit="var n=prompt('Rename {{ sec.name }} to:', '{{ sec.name }}');
-                              if(!n) return false; this.rename.value=n; return true;">
+                              if(!n) return false; this.rename.value=n; return true;" autocomplete="off" data-form-type="other">
                 <input type="hidden" name="name" value="{{ sec.name }}">
                 <input type="hidden" name="rename" value="">
                 <button class="sm" type="submit" name="action" value="rename">Rename</button>
               </form>
               <form method="post" action="/admin/sections" style="display:inline"
-                    onsubmit="return confirm('Delete the category {{ sec.name }}? Its {{ sec.games }} games stay, without a category.')">
+                    onsubmit="return confirm('Delete the category {{ sec.name }}? Its {{ sec.games }} games stay, without a category.')" autocomplete="off" data-form-type="other">
                 <input type="hidden" name="name" value="{{ sec.name }}">
                 <button class="sm bad" type="submit" name="action" value="delete">Delete</button>
               </form>
@@ -188,7 +188,7 @@
         </table>
       </div>
       {% else %}<p class="sub" style="margin:0 0 12px">None yet.</p>{% endif %}
-      <form method="post" action="/admin/sections" style="margin-top:12px">
+      <form method="post" action="/admin/sections" style="margin-top:12px" autocomplete="off" data-form-type="other">
         <div class="row">
           <input class="grow" type="text" name="name" placeholder="New category" required>
           <button class="primary" type="submit" name="action" value="add">Add</button>
@@ -203,7 +203,7 @@
         The left column shows in blue, the right in purple, and a C or below from
         either side makes a game a removal candidate.
       </p>
-      <form method="post" action="/admin/seats">
+      <form method="post" action="/admin/seats" autocomplete="off" data-form-type="other">
         <div class="row">
           <div class="grow">
             <label class="lbl" for="left">Left, blue</label>
@@ -269,7 +269,7 @@
     <div class="card grain">
       <div style="font-size:24px;font-weight:600">{{ slots.balance }} <span style="font-size:13px;color:var(--dim)">/ {{ slots.limit }}</span></div>
       <div style="color:var(--dim);font-size:12px">{{ slots.check_credit }} credit banked</div>
-      <form method="post" action="/admin/slots" style="margin-top:10px">
+      <form method="post" action="/admin/slots" style="margin-top:10px" autocomplete="off" data-form-type="other">
         <div class="row">
           <input class="grow" type="number" name="balance" id="balance" value="{{ slots.balance }}">
           <button type="submit">Set</button>
@@ -279,7 +279,7 @@
 
     <h2>Backups</h2>
     <div class="card grain">
-      <form method="post" action="/admin/export">
+      <form method="post" action="/admin/export" autocomplete="off" data-form-type="other">
         <button class="primary" type="submit" style="width:100%">Export now</button>
       </form>
       <ul class="plain log" style="margin-top:10px">

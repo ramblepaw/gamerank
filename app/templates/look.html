@@ -7,7 +7,7 @@
 <p class="sub">Yours only &mdash; {{ user.username }}'s settings don't touch anyone else's.
   Custom themes are shared, so either of you can use one once it's made.</p>
 
-<form method="post" action="/look">
+<form method="post" action="/look" autocomplete="off" data-form-type="other">
   <h2>Theme</h2>
   <div class="grid" style="--tile:190px">
     {% for id, name, blurb in themes %}

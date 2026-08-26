@@ -31,7 +31,7 @@
     </p>
 
     <form method="post" action="/game/{{ g.id }}/cover" enctype="multipart/form-data"
-          style="margin-top:8px">
+          style="margin-top:8px" autocomplete="off" data-form-type="other">
       <label class="lbl" for="coverfile">Upload a cover</label>
       <input type="file" name="file" id="coverfile" accept="image/*" required
              onchange="this.form.submit()">
@@ -42,12 +42,12 @@
       </p>
     </form>
     {% if g.meta_source == 'manual' %}
-    <form method="post" action="/game/{{ g.id }}/cover/clear" style="margin-top:8px">
+    <form method="post" action="/game/{{ g.id }}/cover/clear" style="margin-top:8px" autocomplete="off" data-form-type="other">
       <button class="bad sm" type="submit" style="width:100%">Remove uploaded cover</button>
     </form>
     {% endif %}
 
-    <form method="post" action="/game/{{ g.id }}/fetch" style="margin-top:10px">
+    <form method="post" action="/game/{{ g.id }}/fetch" style="margin-top:10px" autocomplete="off" data-form-type="other">
       <button type="submit" style="width:100%">Fetch metadata</button>
     </form>
     <p style="margin-top:6px"><a class="btn" href="/game/{{ g.id }}/match" style="display:block;text-align:center">Pick a match by hand</a></p>
@@ -58,7 +58,7 @@
 
     <h2>Delete</h2>
     <form class="card grain" method="post" action="/game/{{ g.id }}/delete"
-          onsubmit="return confirm('Delete {{ g.title }} from the tracker for good? Use Slate instead if you mean to cull it.')">
+          onsubmit="return confirm('Delete {{ g.title }} from the tracker for good? Use Slate instead if you mean to cull it.')" autocomplete="off" data-form-type="other">
       <input type="hidden" name="confirm" value="delete">
       <p class="sub" style="margin:0 0 10px;font-size:12px">
         Erases the row and its history. For test entries and mistakes &mdash; culling a
@@ -176,7 +176,7 @@
       {% endfor %}
     </div>
     {% endif %}
-    <form class="card grain" method="post" action="/game/{{ g.id }}">
+    <form class="card grain" method="post" action="/game/{{ g.id }}" autocomplete="off" data-form-type="other">
       <div class="row">
         <div class="grow" style="flex:3">
           <label class="lbl" for="title">Title</label>

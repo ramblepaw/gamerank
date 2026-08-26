@@ -72,7 +72,7 @@
   {% set exact_count = parsed | selectattr('match.kind', 'equalto', 'exact') | list | length %}
   {% set new_count = 0 if mode == 'update' else (parsed | selectattr('match.kind', 'equalto', 'new') | list | length) %}
   {% set near_count = parsed | selectattr('match.kind', 'equalto', 'near') | list | length %}
-  <form method="post" action="/add/confirm">
+  <form method="post" action="/add/confirm" autocomplete="off" data-form-type="other">
     <input type="hidden" name="text" value="{{ raw }}">
     <input type="hidden" name="mode" value="{{ mode }}">
     <div class="tablewrap" style="margin-bottom:14px">
@@ -184,7 +184,7 @@ recount();
 </script>
   </form>
 {% else %}
-  <form method="post" action="/add/preview">
+  <form method="post" action="/add/preview" autocomplete="off" data-form-type="other">
     <input type="hidden" name="mode" value="{{ mode }}">
     <label class="lbl" for="text">Paste list</label>
     <textarea name="text" id="text" required style="min-height:200px"

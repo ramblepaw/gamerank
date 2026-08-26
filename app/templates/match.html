@@ -9,7 +9,7 @@
   {% if not igdb %}IGDB credentials aren't set, so there's nothing to search.{% endif %}
 </p>
 
-<form class="filters" method="get" action="/game/{{ g.id }}/match">
+<form class="filters" method="get" action="/game/{{ g.id }}/match" autocomplete="off" data-form-type="other">
   <input type="hidden" name="back" value="{{ back }}">
   <div class="wide">
     <label class="lbl" for="q">Search IGDB</label>
@@ -23,7 +23,7 @@
 {% else %}
 <div class="grid">
   {% for r in results %}
-  <form method="post" action="/game/{{ g.id }}/match">
+  <form method="post" action="/game/{{ g.id }}/match" autocomplete="off" data-form-type="other">
     <input type="hidden" name="igdb_id" value="{{ r.igdb_id }}">
     <input type="hidden" name="term" value="{{ term }}">
     <input type="hidden" name="back" value="{{ back }}">

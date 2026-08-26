@@ -10,7 +10,7 @@
 {% if not games %}<div class="empty">Nothing to grade.</div>{% endif %}
 
 {% for g in games %}
-<form class="qcard grain" method="post" action="/grade/{{ g.id }}">
+<form class="qcard grain" method="post" action="/grade/{{ g.id }}" autocomplete="off" data-form-type="other">
   <div class="shot"><div class="art">{{ art(g) }}</div></div>
   <div class="body">
     <h3><a href="/game/{{ g.id }}">{{ g.title }}</a></h3>

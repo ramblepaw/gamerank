@@ -9,7 +9,7 @@
   Saving switches you to it. Custom themes are shared with everyone.
 </p>
 
-<form method="post" action="/look/theme" id="themeform">
+<form method="post" action="/look/theme" id="themeform" autocomplete="off" data-form-type="other">
   <input type="hidden" name="slug" value="{{ editing.slug if editing else '' }}">
 
   <div class="row">

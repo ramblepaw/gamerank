@@ -6,7 +6,7 @@
 <h1>Wishlist</h1>
 <p class="sub">Games you don't have yet. No slot cost until one moves to the library.</p>
 
-<form class="card grain" method="post" action="/wishlist" style="margin-bottom:18px">
+<form class="card grain" method="post" action="/wishlist" style="margin-bottom:18px" autocomplete="off" data-form-type="other">
   <label class="lbl" for="text">Paste list</label>
   <textarea name="text" id="text" required style="min-height:90px"
     placeholder="* [Title](https://store.steampowered.com/app/123/)"></textarea>
@@ -27,10 +27,10 @@
       <td style="color:var(--dim)">{{ it.display_name or '—' }}</td>
       <td style="color:var(--dim)">{{ it.created_at[:10] }}</td>
       <td>
-        <form method="post" action="/wishlist/{{ it.id }}/promote" style="display:inline">
+        <form method="post" action="/wishlist/{{ it.id }}/promote" style="display:inline" autocomplete="off" data-form-type="other">
           <button class="sm" type="submit">Move to library</button>
         </form>
-        <form method="post" action="/wishlist/{{ it.id }}/delete" style="display:inline">
+        <form method="post" action="/wishlist/{{ it.id }}/delete" style="display:inline" autocomplete="off" data-form-type="other">
           <button class="bad sm" type="submit">Drop</button>
         </form>
       </td>
