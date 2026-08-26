@@ -43,17 +43,28 @@ templates = Jinja2Templates(directory=os.path.join(BASE, "templates"))
 RAIL_LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + ["#"]
 
 
-def holds_credit(verified, broken) -> bool:
-    """A game holds one check's credit exactly while it is checked and working."""
-    return bool(verified) and not broken
+def holds_credit(verified, broken, status: str = "active") -> bool:
+    """Whether a game has been paid for the check it was given.
+
+    A check is paid once the game is settled - it works, or it is gone. Broken
+    and still on the server is the one state that owes nothing, which is the
+    point: a broken game that paid its way would never get dealt with. Both
+    ways out of that state settle it, so the withholding is pressure to resolve
+    it rather than a fine for the game turning out bad.
+    """
+    if not verified:
+        return False
+    if status == "removed":
+        return True
+    return not broken
 
 
 def settle_credit(conn, game_id, user_id, before: bool, after: bool) -> None:
     """Pay or take back a check's credit when a game crosses that line.
 
-    Only for the admin routes outside the Verify queue. The queue credits its
-    own submissions, and marking a game updated is priced at a whole slot
-    rather than a check, so neither goes through here.
+    Not used by the Verify queue, which credits its own submissions, nor by
+    marking a game updated, which is priced at a whole slot rather than a
+    check and would otherwise be charged for the same move twice.
     """
     if after and not before:
         slots.credit_check(conn, game_id, user_id)
@@ -741,11 +752,15 @@ def removal_commit(request: Request, user=Depends(require_user)):
     """Everything slated is now actually gone from the server."""
     with db() as conn:
         rows = [dict(r) for r in conn.execute(
-            "SELECT id, title FROM games WHERE slated_at IS NOT NULL AND status = 'active'")]
+            "SELECT id, title, verified, broken, status FROM games"
+            " WHERE slated_at IS NOT NULL AND status = 'active'")]
         for row in rows:
             conn.execute(
                 "UPDATE games SET status = 'removed', removed_at = ?, slated_at = NULL,"
                 " updated_at = ? WHERE id = ?", (now(), now(), row["id"]))
+            settle_credit(conn, row["id"], user["id"],
+                          holds_credit(row["verified"], row["broken"], row["status"]),
+                          holds_credit(row["verified"], row["broken"], "removed"))
             log_audit(conn, row["id"], user["id"], "removed", "batch")
     if rows:
         exporter.export(tag="removed-batch")
@@ -755,8 +770,15 @@ def removal_commit(request: Request, user=Depends(require_user)):
 @app.post("/game/{game_id}/restore")
 def game_restore(request: Request, game_id: int, user=Depends(require_user)):
     with db() as conn:
+        was = conn.execute("SELECT verified, broken, status FROM games WHERE id = ?",
+                           (game_id,)).fetchone()
+        if not was:
+            raise HTTPException(404, "No such game.")
         conn.execute("UPDATE games SET status = 'active', removed_at = NULL, slated_at = NULL,"
                      " updated_at = ? WHERE id = ?", (now(), game_id))
+        settle_credit(conn, game_id, user["id"],
+                      holds_credit(was["verified"], was["broken"], was["status"]),
+                      holds_credit(was["verified"], was["broken"], "active"))
         log_audit(conn, game_id, user["id"], "restored", "")
     exporter.export(tag="restore")
     return RedirectResponse("/game/%d" % game_id, status_code=303)
@@ -823,6 +845,9 @@ def broken_action(request: Request, game_id: int, action: str = Form(...),
             conn.execute(
                 "UPDATE games SET status = 'removed', removed_at = ?, slated_at = NULL,"
                 " updated_at = ? WHERE id = ?", (now(), now(), game_id))
+            settle_credit(conn, game_id, user["id"],
+                          holds_credit(game["verified"], game["broken"], game["status"]),
+                          holds_credit(game["verified"], game["broken"], "removed"))
             log_audit(conn, game_id, user["id"], "removed", "broken")
             if wishlist == "1" and not conn.execute(
                     "SELECT 1 FROM wishlist WHERE title_norm = ?",
