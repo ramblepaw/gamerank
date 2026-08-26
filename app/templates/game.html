@@ -133,6 +133,11 @@
         <div class="grow">
           <div class="lbl">Updated</div>{{ g.last_updated or '—' }}
         </div>
+        {% if g.status == 'removed' %}
+        <div class="grow">
+          <div class="lbl">Removed</div>{{ g.removed_at[:10] if g.removed_at else '—' }}
+        </div>
+        {% endif %}
         <div class="grow">
           <div class="lbl">Section</div>{{ g.section or '—' }}
         </div>
@@ -189,6 +194,13 @@
           <label class="lbl" for="date_added">Date added</label>
           <input type="date" name="date_added" id="date_added" value="{{ g.date_added or '' }}">
         </div>
+        {% if g.status == 'removed' %}
+        <div class="grow">
+          <label class="lbl" for="removed_at">Date removed</label>
+          <input type="date" name="removed_at" id="removed_at"
+                 value="{{ g.removed_at[:10] if g.removed_at else '' }}">
+        </div>
+        {% endif %}
       </div>
 
       <div class="row" style="margin-top:12px">

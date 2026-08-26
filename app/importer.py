@@ -28,6 +28,8 @@ HEADER_MAP = {
     "steam appid": "steam_appid",
     "broken": "broken",
     "repack": "repack",
+    "date removed": "removed_at",
+    "status": "status",
 }
 
 
@@ -136,6 +138,8 @@ def parse_csv(text: str) -> dict:
             "verified": _bool(cell("verified")),
             "broken": _bool(cell("broken")),
             "repack": cell("repack").strip().lower() or None,
+            "removed_at": _date(cell("removed_at")),
+            "status": "removed" if cell("status").strip().lower() == "removed" else "active",
             "grade": grade or None,
             "playtime_minutes": _int(cell("playtime_minutes")),
             "keep_flag": cell("keep_flag").lower() or None,
@@ -179,15 +183,15 @@ def import_csv(text: str, user_id=None, replace: bool = True) -> dict:
                 "INSERT INTO games (title, title_norm, title_sort, section, date_added,"
                 " last_updated, notes,"
                 " verified, broken, repack, grade, playtime_minutes, keep_flag,"
-                " steam_appid, store_url,"
+                " status, removed_at, steam_appid, store_url,"
                 " legacy_ea, legacy_own, legacy_portable, legacy_completed, legacy_badge,"
                 " legacy_emulator, created_at, updated_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     g["title"], g["title_norm"], g["title_sort"], g["section"], g["date_added"],
                     g["last_updated"],
                     g["notes"], g["verified"], g["broken"], g["repack"], g["grade"],
-                    g["playtime_minutes"], g["keep_flag"],
+                    g["playtime_minutes"], g["keep_flag"], g["status"], g["removed_at"],
                     g["steam_appid"],
                     "https://store.steampowered.com/app/%d/" % g["steam_appid"] if g["steam_appid"] else None,
                     g["legacy_ea"], g["legacy_own"], g["legacy_portable"], g["legacy_completed"],

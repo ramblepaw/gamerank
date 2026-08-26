@@ -97,7 +97,7 @@
     {{ rail }}
     <div class="tablewrap">
     <table>
-      <thead><tr><th></th><th>Title</th><th>Checked</th><th>Grade</th><th>Played</th><th>Keep</th><th>Added</th><th>Section</th></tr></thead>
+      <thead><tr><th></th><th>Title</th><th>Checked</th><th>Grade</th><th>Played</th><th>Keep</th><th>Added</th>{% if show_removed %}<th>Removed</th>{% endif %}<th>Section</th></tr></thead>
       <tbody id="results">{% include "_library_items.html" %}</tbody>
     </table>
     </div>

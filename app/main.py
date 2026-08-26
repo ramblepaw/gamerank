@@ -471,7 +471,8 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
         # Only the repeatable rows, for the infinite scroller to append.
         return templates.TemplateResponse(
             "_library_items.html",
-            {"request": request, "games": rows, "view": view, "user": user})
+            {"request": request, "games": rows, "view": view, "user": user,
+             "show_removed": status == "removed"})
 
     # Remember what was being looked at, so coming back from a game page or the
     # nav resumes it rather than resetting to everything.
@@ -482,6 +483,7 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
     return render(request, "library.html", user=user, games=rows, total=total, page=page,
                   pages=max(1, (total + per - 1) // per), sections=sections, grades=GRADES,
                   view=view, rail_counts=rail, letters=RAIL_LETTERS, repacks=REPACKS,
+                  show_removed=status == "removed",
                   f={"q": q, "verified": verified, "grade": grade, "keep": keep,
                      "section": section, "status": status, "sort": sort, "view": view,
                      "letter": letter,
@@ -528,7 +530,7 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
                 verified: str = Form(""), grade: str = Form(""), playtime: str = Form(""),
                 keep_flag: str = Form(""), notes: str = Form(""),
                 works: str = Form("yes"), version: str = Form(""),
-                repack: str = Form(""),
+                repack: str = Form(""), removed_at: str = Form(""),
                 section: str = Form(""), date_added: str = Form(""),
                 steam_appid: str = Form(""), cover_url: str = Form(""),
                 store_url: str = Form(""), user=Depends(require_user)):
@@ -548,10 +550,17 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
         store_url = metadata.steam_store_url(appid)
 
     with db() as conn:
-        was = conn.execute("SELECT verified, broken FROM games WHERE id = ?",
-                           (game_id,)).fetchone()
+        was = conn.execute("SELECT verified, broken, status, removed_at FROM games"
+                           " WHERE id = ?", (game_id,)).fetchone()
         if not was:
             raise HTTPException(404, "No such game.")
+
+        # Only a game that is actually gone carries a removal date, and the
+        # archived back-catalogue needs its real one rather than the day it
+        # was typed in.
+        gone_on = was["removed_at"]
+        if was["status"] == "removed":
+            gone_on = removed_at.strip() or was["removed_at"]
 
         if user["is_admin"]:
             is_verified = 1 if verified == "1" else 0
@@ -564,13 +573,14 @@ def game_update(request: Request, game_id: int, title: str = Form(...),
         conn.execute(
             "UPDATE games SET title = ?, title_norm = ?, title_sort = ?, section = ?,"
             " date_added = ?, verified = ?, notes = ?, broken = ?, repack = ?,"
-            " version = ?, steam_appid = ?, cover_url = ?, store_url = ?, updated_at = ?"
-            " WHERE id = ?",
+            " version = ?, steam_appid = ?, cover_url = ?, store_url = ?, removed_at = ?,"
+            " updated_at = ? WHERE id = ?",
             (title.strip(), norm_title(title), sort_title(title), section.strip() or None,
              date_added.strip() or FALLBACK_DATE, is_verified, notes.strip() or None,
              is_broken, repack if repack in REPACK_KEYS else None,
              version.strip() or None, appid,
-             cover_url.strip() or None, store_url.strip() or None, now(), game_id))
+             cover_url.strip() or None, store_url.strip() or None, gone_on,
+             now(), game_id))
         grades.set_grade(conn, game_id, user["id"], grade or None, minutes, keep_flag)
         settle_credit(conn, game_id, user["id"],
                       holds_credit(was["verified"], was["broken"]),
