@@ -27,7 +27,6 @@
       {% elif g.verified %}<span class="mark ok" title="Works">&#10003;</span>
       {% else %}<span class="mark no" title="Not checked">&#10007;</span>{% endif %}
       {% if g.slated_at %}<span class="tag no">slated</span>{% endif %}
-      {% if g.keep_flag == 'remove' and not g.slated_at %}<span class="tag no">cut</span>{% endif %}
     </span>
     <span class="tileacts">
       {% set may_edit = not (user and user.is_guest) %}
