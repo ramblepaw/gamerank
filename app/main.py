@@ -520,13 +520,10 @@ def game_detail(request: Request, game_id: int, err: str = "", user=Depends(requ
             " LEFT JOIN users vu ON vu.id = g.verified_by WHERE g.id = ?", (game_id,)).fetchone()
         if not row:
             raise HTTPException(404, "No such game.")
-        history = [dict(r) for r in conn.execute(
-            "SELECT a.*, u.username AS display_name FROM audit a LEFT JOIN users u ON u.id = a.user_id"
-            " WHERE a.game_id = ? ORDER BY a.id DESC LIMIT 30", (game_id,))]
         panels = grades.panels(conn, game_id, user)
         mine = grades.for_game(conn, game_id).get(user["id"])
         sections = section_names(conn)
-    return render(request, "game.html", user=user, g=dict(row), history=history, err=err,
+    return render(request, "game.html", user=user, g=dict(row), err=err,
                   grades=GRADES, panels=panels, repacks=REPACKS,
                   mine=dict(mine) if mine else None, sections=sections,
                   igdb=metadata.igdb_available())
@@ -586,8 +583,12 @@ async def game_update(request: Request, game_id: int, user=Depends(require_user)
             put("repack", val("repack") if val("repack") in REPACK_KEYS else None)
         if sent("steam_appid"):
             put("steam_appid", appid)
-        if sent("cover_url"):
+        if sent("cover_url") and (val("cover_url") or None) != (was["cover_url"] or None):
+            # Art you chose by hand outranks anything fetched, however you set
+            # it. Only the upload button used to say so, which left a pasted
+            # URL to be overwritten by the next metadata fetch.
             put("cover_url", val("cover_url") or None)
+            put("meta_source", "manual" if val("cover_url") else None)
         if sent("store_url"):
             put("store_url", store_url or None)
         # Saving the page is not an update, so this moves only when the field

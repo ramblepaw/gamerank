@@ -66,18 +66,6 @@
       </p>
       <button class="bad" type="submit" style="width:100%">Delete permanently</button>
     </form>
-
-    <h2>Log</h2>
-    <div class="card log">
-      {% if history %}
-      <ul class="plain">
-        {% for h in history %}
-        <li>{{ d(h.created_at) }} {{ h.action }}{% if h.detail %} &mdash; {{ h.detail }}{% endif %}
-          {% if h.display_name %}<span style="opacity:.7">({{ h.display_name }})</span>{% endif %}</li>
-        {% endfor %}
-      </ul>
-      {% else %}<p style="margin:0">Nothing yet.</p>{% endif %}
-    </div>
     {% endif %}
   </div>
 
