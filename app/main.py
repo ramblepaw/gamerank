@@ -524,66 +524,87 @@ def game_detail(request: Request, game_id: int, err: str = "", user=Depends(requ
 
 
 @app.post("/game/{game_id}")
-def game_update(request: Request, game_id: int, title: str = Form(...),
-                verified: str = Form(""), grade: str = Form(""), playtime: str = Form(""),
-                notes: str = Form(""),
-                works: str = Form("yes"), version: str = Form(""),
-                repack: str = Form(""), removed_at: str = Form(""),
-                last_updated: str = Form(""),
-                section: str = Form(""), date_added: str = Form(""),
-                steam_appid: str = Form(""), cover_url: str = Form(""),
-                store_url: str = Form(""), user=Depends(require_user)):
-    grade = (grade or "").strip().upper()
+async def game_update(request: Request, game_id: int, user=Depends(require_user)):
+    """Save the game page.
+
+    Only columns whose field was actually submitted are written. Filling every
+    column from the form meant a page that predated a field - an old tab, a
+    cached page, a form rendered for someone without permission to see it -
+    silently erased whatever it had no box for.
+    """
+    form = await request.form()
+    sent = lambda name: name in form
+    val = lambda name: str(form.get(name, "")).strip()
+
+    if not sent("title") or not val("title"):
+        raise HTTPException(400, "A title is required.")
+    title = val("title")
+
+    grade = val("grade").upper()
     if grade and grade not in GRADES:
         raise HTTPException(400, "Unknown grade.")
-    try:
-        minutes = int(playtime) if str(playtime).strip() else None
-    except ValueError:
-        minutes = None
-    try:
-        appid = int(steam_appid) if str(steam_appid).strip() else None
-    except ValueError:
-        appid = None
+    def as_int(name):
+        try:
+            return int(val(name)) if val(name) else None
+        except ValueError:
+            return None
+    minutes, appid = as_int("playtime"), as_int("steam_appid")
 
-    if appid and not store_url.strip():
+    store_url = val("store_url")
+    if appid and not store_url:
         store_url = metadata.steam_store_url(appid)
 
     with db() as conn:
-        was = conn.execute("SELECT verified, broken, status, removed_at, last_updated"
-                           " FROM games WHERE id = ?", (game_id,)).fetchone()
+        was = conn.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
         if not was:
             raise HTTPException(404, "No such game.")
 
-        # Only a game that is actually gone carries a removal date, and the
-        # archived back-catalogue needs its real one rather than the day it
-        # was typed in.
-        gone_on = was["removed_at"]
-        if was["status"] == "removed":
-            gone_on = removed_at.strip() or was["removed_at"]
+        sets, params = ["title = ?", "title_norm = ?", "title_sort = ?"],                        [title, norm_title(title), sort_title(title)]
 
-        if user["is_admin"]:
-            is_verified = 1 if verified == "1" else 0
+        def put(column, value):
+            sets.append("%s = ?" % column)
+            params.append(value)
+
+        if sent("section"):
+            put("section", val("section") or None)
+        if sent("date_added"):
+            put("date_added", val("date_added") or FALLBACK_DATE)
+        if sent("notes"):
+            put("notes", val("notes") or None)
+        if sent("version"):
+            put("version", val("version") or None)
+        if sent("repack"):
+            put("repack", val("repack") if val("repack") in REPACK_KEYS else None)
+        if sent("steam_appid"):
+            put("steam_appid", appid)
+        if sent("cover_url"):
+            put("cover_url", val("cover_url") or None)
+        if sent("store_url"):
+            put("store_url", store_url or None)
+        # Saving the page is not an update, so this moves only when the field
+        # itself was edited.
+        if sent("last_updated"):
+            put("last_updated", val("last_updated") or None)
+        # Only a game that is gone carries a removal date.
+        if sent("removed_at") and was["status"] == "removed":
+            put("removed_at", val("removed_at") or was["removed_at"])
+
+        # Checking a game off outside the queue is an admin privilege.
+        is_verified, is_broken = was["verified"], was["broken"]
+        if user["is_admin"] and sent("verified"):
+            is_verified = 1 if val("verified") == "1" else 0
             # Nothing unchecked can be known to be broken.
-            is_broken = 1 if (is_verified and works == "no") else 0
-        else:
-            # Checking a game off outside the queue is an admin privilege.
-            is_verified, is_broken = was["verified"], was["broken"]
+            is_broken = 1 if (is_verified and sent("works") and val("works") == "no") else 0
+            put("verified", is_verified)
+            put("broken", is_broken)
 
-        conn.execute(
-            "UPDATE games SET title = ?, title_norm = ?, title_sort = ?, section = ?,"
-            " date_added = ?, last_updated = ?, verified = ?, notes = ?, broken = ?, repack = ?,"
-            " version = ?, steam_appid = ?, cover_url = ?, store_url = ?, removed_at = ?,"
-            " updated_at = ? WHERE id = ?",
-            (title.strip(), norm_title(title), sort_title(title), section.strip() or None,
-             date_added.strip() or FALLBACK_DATE,
-             # Saving the page is not an update, so this only moves when the
-             # field itself is changed.
-             last_updated.strip() or None, is_verified, notes.strip() or None,
-             is_broken, repack if repack in REPACK_KEYS else None,
-             version.strip() or None, appid,
-             cover_url.strip() or None, store_url.strip() or None, gone_on,
-             now(), game_id))
-        grades.set_grade(conn, game_id, user["id"], grade or None, minutes)
+        put("updated_at", now())
+        params.append(game_id)
+        conn.execute("UPDATE games SET " + ", ".join(sets) + " WHERE id = ?", params)
+
+        # A grade is only touched when its own field came with the form.
+        if sent("grade"):
+            grades.set_grade(conn, game_id, user["id"], grade or None, minutes)
         settle_credit(conn, game_id, user["id"],
                       holds_credit(was["verified"], was["broken"]),
                       holds_credit(is_verified, is_broken))
