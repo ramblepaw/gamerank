@@ -22,7 +22,7 @@
     <tr>
       <td><a href="/game/{{ g.id }}">{{ g.title }}</a> {{ steamlink(g) }}</td>
       <td style="color:var(--dim)">{{ g.section or '—' }}</td>
-      <td style="color:var(--dim)">{{ g.date_added or '—' }}</td>
+      <td style="color:var(--dim)">{{ d(g.date_added) or '—' }}</td>
       <td>
         <a class="btn sm" href="/game/{{ g.id }}/match">Find a match</a>
         <a class="btn sm" target="_blank" rel="noopener"

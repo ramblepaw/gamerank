@@ -277,6 +277,15 @@
       </form>
     </div>
 
+    <h2>Activity</h2>
+    <div class="card grain">
+      <p class="sub" style="margin:0 0 12px">
+        Every action anyone has taken, with what each edit changed, filterable
+        by game, action, person and date.
+      </p>
+      <a class="btn" href="/admin/activity" style="display:block;text-align:center">Open the log</a>
+    </div>
+
     <h2>Repair</h2>
     <div class="card grain">
       <p class="sub" style="margin:0 0 12px">
@@ -311,7 +320,7 @@
                 {% else %}<span class="mark ok">&#10003;</span>{% endif %}</td>
             <td style="color:var(--dim)">{{ g.repack | capitalize if g.repack else '' }}</td>
             <td style="color:var(--dim)">{{ g.verifier or '' }}</td>
-            <td style="color:var(--dim)">{{ g.verified_at[:10] }}</td>
+            <td style="color:var(--dim)">{{ d(g.verified_at) }}</td>
           </tr>
           {% endfor %}
           </tbody>
@@ -325,7 +334,7 @@
       {% if events %}
       <ul class="plain">
         {% for e in events %}
-        <li>{{ e.created_at[:10] }} <b>{{ '+' if e.delta > 0 else '' }}{{ e.delta }}</b>
+        <li>{{ d(e.created_at) }} <b>{{ '+' if e.delta > 0 else '' }}{{ e.delta }}</b>
           {{ e.reason }}{% if e.title %} &mdash; {{ e.title }}{% endif %}
           <span style="opacity:.6">&rarr; {{ e.balance_after }}</span></li>
         {% endfor %}

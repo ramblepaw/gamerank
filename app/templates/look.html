@@ -88,6 +88,19 @@
     {% endfor %}
   </div>
 
+  <h2>Dates</h2>
+  <div class="seg">
+    {% for key, label in date_formats %}
+    <input type="radio" name="date_format" id="df-{{ key }}" value="{{ key }}"
+           {{ 'checked' if (user.date_format or 'mdy') == key }}>
+    <label for="df-{{ key }}">{{ label }}</label>
+    {% endfor %}
+  </div>
+  <p class="sub" style="font-size:12px;margin:6px 0 0">
+    How dates are written throughout the app. Date pickers follow your browser
+    and cannot be changed from here.
+  </p>
+
   <h2>Motion</h2>
   <div class="seg">
     <input type="radio" name="motion" id="m-on" value="on" {{ 'checked' if ui.motion != 'off' }}>

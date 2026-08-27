@@ -20,8 +20,8 @@
         {%- endfor -%}
       </td>
       <td>{{ g.playtime_minutes ~ 'm' if g.playtime_minutes is not none else '—' }}</td>
-      <td style="color:var(--dim)">{{ g.date_added or '—' }}</td>
-      {% if show_removed %}<td style="color:var(--dim)">{{ g.removed_at[:10] if g.removed_at else '—' }}</td>{% endif %}
+      <td style="color:var(--dim)">{{ d(g.date_added) or '—' }}</td>
+      {% if show_removed %}<td style="color:var(--dim)">{{ d(g.removed_at) or '—' }}</td>{% endif %}
       <td style="color:var(--dim)">{{ g.section or '—' }}</td>
     </tr>
   {% endfor %}

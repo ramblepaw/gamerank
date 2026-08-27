@@ -16,7 +16,7 @@
     <h3><a href="/game/{{ g.id }}">{{ g.title }}</a></h3>
     <div class="qmeta">
       {% if g.section %}<span>{{ g.section }}</span>{% endif %}
-      {% if g.date_added %}<span>{{ g.date_added }}</span>{% endif %}
+      {% if g.date_added %}<span>{{ d(g.date_added) }}</span>{% endif %}
       {% if g.store_url %}<span>{{ steamlink(g) }}</span>{% endif %}
     </div>
 

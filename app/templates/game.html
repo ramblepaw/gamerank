@@ -72,7 +72,7 @@
       {% if history %}
       <ul class="plain">
         {% for h in history %}
-        <li>{{ h.created_at[:10] }} {{ h.action }}{% if h.detail %} &mdash; {{ h.detail }}{% endif %}
+        <li>{{ d(h.created_at) }} {{ h.action }}{% if h.detail %} &mdash; {{ h.detail }}{% endif %}
           {% if h.display_name %}<span style="opacity:.7">({{ h.display_name }})</span>{% endif %}</li>
         {% endfor %}
       </ul>
@@ -124,14 +124,14 @@
 
       <div class="row" style="margin-top:14px">
         <div class="grow">
-          <div class="lbl">Added</div>{{ g.date_added or '—' }}
+          <div class="lbl">Added</div>{{ d(g.date_added) or '—' }}
         </div>
         <div class="grow">
-          <div class="lbl">Updated</div>{{ g.last_updated or '—' }}
+          <div class="lbl">Updated</div>{{ d(g.last_updated) or '—' }}
         </div>
         {% if g.status == 'removed' %}
         <div class="grow">
-          <div class="lbl">Removed</div>{{ g.removed_at[:10] if g.removed_at else '—' }}
+          <div class="lbl">Removed</div>{{ d(g.removed_at) or '—' }}
         </div>
         {% endif %}
         <div class="grow">

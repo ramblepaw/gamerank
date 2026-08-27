@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% set nav = 'admin' %}
+{% block title %}Activity &middot; GameRank{% endblock %}
+{% block body %}
+
+<p class="crumbs"><a href="/admin">&larr; Admin</a></p>
+<h1>Activity</h1>
+<p class="sub">{{ total }} entr{{ 'y' if total == 1 else 'ies' }}</p>
+
+<form class="filters" method="get" action="/admin/activity"
+      autocomplete="off" data-form-type="other">
+  <div class="wide"><label class="lbl" for="q">Search</label>
+    <input type="search" name="q" id="q" value="{{ f.q }}" placeholder="Game or detail..."></div>
+  <div><label class="lbl" for="action">Action</label>
+    <select name="action" id="action"><option value="">any</option>
+      {% for a in actions %}<option value="{{ a }}" {{ 'selected' if f.action == a }}>{{ a }}</option>{% endfor %}</select></div>
+  <div><label class="lbl" for="who">By</label>
+    <select name="who" id="who"><option value="">anyone</option>
+      {% for p in people %}<option value="{{ p.id }}" {{ 'selected' if f.who == p.id | string }}>{{ p.username }}</option>{% endfor %}</select></div>
+  <div><label class="lbl" for="since">From</label>
+    <input type="date" name="since" id="since" value="{{ f.since }}"></div>
+  <div><label class="lbl" for="until">To</label>
+    <input type="date" name="until" id="until" value="{{ f.until }}"></div>
+  <div><button class="primary" type="submit">Filter</button></div>
+</form>
+
+{% set active = f.q or f.action or f.who or f.since or f.until %}
+{% if active %}
+<p class="sub"><a href="/admin/activity">clear filters</a>
+  <span class="tag warn" style="margin-left:4px">filtered</span></p>
+{% endif %}
+
+{% if not rows %}
+  <div class="empty">Nothing matches.</div>
+{% else %}
+<div class="tablewrap">
+<table>
+  <thead><tr><th>When</th><th>Game</th><th>Action</th><th>By</th><th class="wrap">What changed</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td style="color:var(--dim);white-space:nowrap">{{ d(r.created_at) }}
+        <span style="opacity:.65">{{ r.created_at[11:16] }}</span></td>
+      <td>{% if r.game_id %}<a href="/game/{{ r.game_id }}">{{ r.title or 'deleted game' }}</a>
+          {% if r.game_status == 'removed' %}<span class="tag warn">removed</span>{% endif %}
+          {% else %}<span style="color:var(--dim)">&mdash;</span>{% endif %}</td>
+      <td><span class="tag {{ 'no' if r.action in ['removed','slated','deleted'] else ('ok' if r.action in ['verified','fixed','added'] else 'dim') }}">{{ r.action }}</span></td>
+      <td style="color:var(--dim)">{{ r.username or '&mdash;' | safe }}</td>
+      <td class="wrap" style="color:var(--dim);max-width:420px">{{ r.detail or '' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if pages > 1 %}
+{% set qs = 'q=' ~ f.q ~ '&action=' ~ f.action ~ '&who=' ~ f.who ~ '&since=' ~ f.since ~ '&until=' ~ f.until %}
+<div class="pager">
+  {% if page > 1 %}<a class="btn" href="/admin/activity?{{ qs }}&page={{ page - 1 }}">Prev</a>{% endif %}
+  <span>{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a class="btn" href="/admin/activity?{{ qs }}&page={{ page + 1 }}">Next</a>{% endif %}
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

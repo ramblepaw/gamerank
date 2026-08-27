@@ -54,7 +54,7 @@
      the date the game was first added. #}
   {% set shown = g.touched or g.last_updated or g.date_added %}
   <div class="meta">
-    {{- shown or '' -}}
+    {{- d(shown) or '' -}}
     {%- if g.last_updated and g.last_updated == shown and g.date_added != shown %} upd{% endif -%}
     {%- if g.playtime_minutes is not none %} &middot; {{ g.playtime_minutes }}m{% endif -%}
   </div>

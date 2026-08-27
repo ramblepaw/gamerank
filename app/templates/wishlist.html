@@ -25,7 +25,7 @@
       <td>{% if it.store_url %}<a href="{{ it.store_url }}" target="_blank" rel="noopener">{{ it.title }}</a>
           {% else %}{{ it.title }}{% endif %}</td>
       <td style="color:var(--dim)">{{ it.display_name or '—' }}</td>
-      <td style="color:var(--dim)">{{ it.created_at[:10] }}</td>
+      <td style="color:var(--dim)">{{ d(it.created_at) }}</td>
       <td>
         <form method="post" action="/wishlist/{{ it.id }}/promote" style="display:inline" autocomplete="off" data-form-type="other">
           <button class="sm" type="submit">Move to library</button>

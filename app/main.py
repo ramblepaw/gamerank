@@ -16,6 +16,7 @@ from . import slots, queues, exporter, importer, metadata, paste, jobs, themes, 
 from .db import (
     db, init_db, now, today, norm_title, sort_title, log_audit, get_setting_conn, set_setting,
     hash_password, verify_password, GRADES, REPACKS, REPACK_KEYS,
+    DATE_FORMATS, DEFAULT_DATE_FORMAT, fmt_date,
     EXPORT_DIR, FALLBACK_DATE, DATA_DIR,
     THEMES, ACCENTS, DENSITIES, TILE_SIZES, THEME_TOKENS, DEFAULT_THEME,
 )
@@ -204,9 +205,16 @@ def prefs(user) -> dict:
     }
 
 
+def date_style(user) -> str:
+    style = (user or {}).get("date_format") or DEFAULT_DATE_FORMAT
+    return style if style in dict(DATE_FORMATS) else DEFAULT_DATE_FORMAT
+
+
 def render(request: Request, template: str, **ctx):
     user = ctx.pop("user", None) or current_user(request)
     ctx["ui"] = prefs(user)
+    ctx["d"] = lambda value: fmt_date(value, date_style(user))
+    ctx["date_formats"] = DATE_FORMATS
     ctx["asset_v"] = ASSET_V
     with db() as conn:
         ctx["slots"] = slots.status(conn)
@@ -470,7 +478,8 @@ def library(request: Request, q: str = "", verified: str = "", grade: str = "",
         return templates.TemplateResponse(
             "_library_items.html",
             {"request": request, "games": rows, "view": view, "user": user,
-             "show_removed": status == "removed"})
+             "show_removed": status == "removed",
+             "d": lambda value: fmt_date(value, date_style(user))})
 
     # Remember what was being looked at, so coming back from a game page or the
     # nav resumes it rather than resetting to everything.
@@ -598,6 +607,17 @@ async def game_update(request: Request, game_id: int, user=Depends(require_user)
             put("verified", is_verified)
             put("broken", is_broken)
 
+        # What actually changed, so "edited" stops being the whole story.
+        moved = []
+        for column, value in zip(sets, params):
+            column = column.split(" =")[0]
+            if column in ("title_norm", "title_sort"):
+                continue
+            old = was[column] if column in was.keys() else None
+            if (old or None) != (value or None):
+                moved.append("%s: %s -> %s" % (column, old if old not in (None, "") else "blank",
+                                               value if value not in (None, "") else "blank"))
+
         put("updated_at", now())
         params.append(game_id)
         conn.execute("UPDATE games SET " + ", ".join(sets) + " WHERE id = ?", params)
@@ -608,7 +628,7 @@ async def game_update(request: Request, game_id: int, user=Depends(require_user)
         settle_credit(conn, game_id, user["id"],
                       holds_credit(was["verified"], was["broken"]),
                       holds_credit(is_verified, is_broken))
-        log_audit(conn, game_id, user["id"], "edited", "")
+        log_audit(conn, game_id, user["id"], "edited", "; ".join(moved) or "no change")
     exporter.export(tag="edit")
     return RedirectResponse("/game/%d" % game_id, status_code=303)
 
@@ -1180,6 +1200,50 @@ def admin_page(request: Request, user=Depends(require_admin)):
                   igdb=metadata.igdb_available(), job=jobs.status())
 
 
+@app.get("/admin/activity", response_class=HTMLResponse)
+def admin_activity(request: Request, q: str = "", action: str = "", who: str = "",
+                   since: str = "", until: str = "", page: int = 1,
+                   user=Depends(require_admin)):
+    """Everything that has happened, in one list."""
+    where, params = [], []
+    if q.strip():
+        where.append("(g.title_norm LIKE ? OR a.detail LIKE ?)")
+        params.extend(["%" + norm_title(q) + "%", "%" + q.strip() + "%"])
+    if action:
+        where.append("a.action = ?")
+        params.append(action)
+    if who:
+        where.append("a.user_id = ?")
+        params.append(who)
+    if since.strip():
+        where.append("a.created_at >= ?")
+        params.append(since.strip())
+    if until.strip():
+        where.append("a.created_at <= ?")
+        params.append(until.strip() + "T23:59:59")
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+
+    page = max(1, page)
+    per = 100
+    with db() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM audit a LEFT JOIN games g ON g.id = a.game_id"
+            + clause, params).fetchone()["n"]
+        rows = [dict(r) for r in conn.execute(
+            "SELECT a.*, g.title, g.status AS game_status, u.username FROM audit a"
+            " LEFT JOIN games g ON g.id = a.game_id"
+            " LEFT JOIN users u ON u.id = a.user_id" + clause +
+            " ORDER BY a.id DESC LIMIT ? OFFSET ?", (*params, per, (page - 1) * per))]
+        actions = [r["action"] for r in conn.execute(
+            "SELECT DISTINCT action FROM audit ORDER BY action")]
+        people = [dict(r) for r in conn.execute(
+            "SELECT id, username FROM users ORDER BY username")]
+    return render(request, "activity.html", user=user, rows=rows, total=total,
+                  page=page, pages=max(1, (total + per - 1) // per),
+                  actions=actions, people=people,
+                  f={"q": q, "action": action, "who": who, "since": since, "until": until})
+
+
 @app.post("/admin/settings")
 def admin_settings(request: Request, slot_limit: str = Form(...), checks_per_slot: str = Form(...),
                    queue_size: str = Form(...), library_target: str = Form(...),
@@ -1368,18 +1432,20 @@ def look(request: Request, user=Depends(require_user)):
 @app.post("/look")
 def look_save(request: Request, theme: str = Form(""), accent: str = Form(""),
               density: str = Form(""), tile_size: str = Form(""),
-              motion: str = Form(""), user=Depends(require_user)):
+              motion: str = Form(""), date_format: str = Form(""),
+              user=Depends(require_user)):
     valid = {t[0] for t in THEMES} | {c["slug"] for c in themes.custom_list()}
     accent = (accent or "").lstrip("#").lower()
     with db() as conn:
         conn.execute(
-            "UPDATE users SET theme = ?, accent = ?, density = ?, tile_size = ?, motion = ?"
-            " WHERE id = ?",
+            "UPDATE users SET theme = ?, accent = ?, density = ?, tile_size = ?,"
+            " motion = ?, date_format = ? WHERE id = ?",
             (theme if theme in valid else DEFAULT_THEME,
              accent if re.fullmatch(r"[0-9a-f]{6}", accent or "") else "",
              density if density in DENSITIES else "comfortable",
              tile_size if tile_size in TILE_SIZES else "medium",
              "off" if motion == "off" else "on",
+             date_format if date_format in dict(DATE_FORMATS) else DEFAULT_DATE_FORMAT,
              user["id"]))
     return RedirectResponse("/look", status_code=303)
 

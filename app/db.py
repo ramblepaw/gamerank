@@ -16,6 +16,24 @@ EXPORT_DIR = os.path.join(DATA_DIR, "exports")
 GRADES = ["S", "A", "B", "C", "D"]
 GAME_STATUSES = ["active", "removed"]
 
+# How dates are written out. The stored form is always ISO.
+DATE_FORMATS = [("mdy", "MM/DD/YYYY"), ("dmy", "DD/MM/YYYY"), ("ymd", "YYYY-MM-DD")]
+DEFAULT_DATE_FORMAT = "mdy"
+
+
+def fmt_date(value, style: str = DEFAULT_DATE_FORMAT) -> str:
+    """Render a stored date the way this account likes to read them."""
+    raw = str(value or "")[:10]
+    if len(raw) != 10 or raw[4] != "-":
+        return raw
+    y, m, d = raw[:4], raw[5:7], raw[8:10]
+    if style == "dmy":
+        return "%s/%s/%s" % (d, m, y)
+    if style == "ymd":
+        return "%s-%s-%s" % (y, m, d)
+    return "%s/%s/%s" % (m, d, y)
+
+
 # Who compressed the copy on the server. None is a plain install.
 REPACKS = [("fitgirl", "FitGirl"), ("dodi", "DODI")]
 REPACK_KEYS = [key for key, _ in REPACKS]
@@ -241,6 +259,7 @@ MIGRATIONS = [
     # recomputed per query so the masterlist can sort and index on it.
     ("games", "title_sort", "TEXT"),
     ("games", "repack", "TEXT"),
+    ("users", "date_format", "TEXT"),
 ]
 
 
