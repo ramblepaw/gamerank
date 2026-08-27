@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% set nav = 'admin' %}
+{% block title %}Restore update dates &middot; GameRank{% endblock %}
+{% block body %}
+
+<p class="crumbs"><a href="/admin">&larr; Admin</a></p>
+<h1>Restore update dates</h1>
+
+{% if err %}<div class="flash warn">{{ err }}</div>{% endif %}
+
+{% if result %}
+  {% if result.applied %}
+    <div class="flash">
+      Put {{ result.changes | length }} update date{{ '' if result.changes | length == 1 else 's' }}
+      back the way the sheet has them. Nothing else was touched.
+    </div>
+  {% else %}
+    <p class="sub">
+      {{ result.csv_rows }} rows read.
+      <b>{{ result.changes | length }}</b> game{{ '' if result.changes | length == 1 else 's' }}
+      would change.
+      {% if result.not_in_csv %}{{ result.not_in_csv }} in the library are not in the CSV and
+      would be left alone.{% endif %}
+    </p>
+    {% if result.collisions %}
+    <div class="flash warn">
+      {{ result.collisions | length }} title{{ '' if result.collisions | length == 1 else 's' }}
+      appear on more than one row of the sheet. Every copy gets the most recent
+      date any of those rows carries, because a title is all there is to match on.
+    </div>
+    {% endif %}
+  {% endif %}
+
+  {% if result.changes and not result.applied %}
+  <div class="tablewrap" style="max-height:460px;overflow-y:auto">
+    <table>
+      <thead><tr><th>Game</th><th>Currently</th><th>Should be</th></tr></thead>
+      <tbody>
+      {% for c in result.changes %}
+      <tr>
+        <td><a href="/game/{{ c.id }}">{{ c.title }}</a></td>
+        <td style="color:var(--bad)">{{ c.now or '—' }}</td>
+        <td style="color:var(--ok)">{{ c.was or 'blank' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="sub" style="margin-top:12px">
+    Upload the same file again with the box ticked to write these.
+  </p>
+  {% endif %}
+{% endif %}
+
+<h2>{{ 'Run it again' if result else 'Check a CSV' }}</h2>
+<form class="card grain" method="post" action="/admin/restore-updated"
+      enctype="multipart/form-data" autocomplete="off" data-form-type="other">
+  <p class="sub" style="margin:0 0 12px">
+    Reads the Last Updated column and writes it onto the matching titles. Only
+    that column &mdash; grades, dates added, verification and everything else are
+    left exactly as they are. Games absent from the CSV are skipped.
+  </p>
+  <label class="lbl" for="file">Masterlist CSV</label>
+  <input type="file" name="file" id="file" accept=".csv" required>
+  <div style="height:10px"></div>
+  <label style="display:flex;gap:7px;align-items:center;font-size:13px">
+    <input type="checkbox" name="apply" value="1" style="width:auto">
+    Write the changes &mdash; leave unticked to see them first
+  </label>
+  <div style="height:12px"></div>
+  <button class="primary" type="submit">Go</button>
+</form>
+{% endblock %}

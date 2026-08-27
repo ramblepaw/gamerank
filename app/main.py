@@ -1465,6 +1465,63 @@ def needs_art(request: Request, page: int = 1, user=Depends(require_user)):
                   igdb=metadata.igdb_available())
 
 
+@app.get("/admin/restore-updated", response_class=HTMLResponse)
+def admin_restore_form(request: Request, user=Depends(require_admin)):
+    return render(request, "restore.html", user=user, err=None, result=None)
+
+
+@app.post("/admin/restore-updated", response_class=HTMLResponse)
+async def admin_restore_updated(request: Request, file: UploadFile = File(...),
+                                apply: str = Form(""), user=Depends(require_admin)):
+    """Put the Last Updated column back the way the sheet has it.
+
+    Verifying, grading or saving a game used to stamp today's date on it, which
+    is not what an update means. This repairs that one field from a CSV and
+    touches nothing else - not the grades, not the dates added, not a single
+    other column.
+    """
+    raw = await file.read()
+    try:
+        parsed = importer.parse_csv(raw.decode("utf-8-sig", errors="replace"))
+    except ValueError as exc:
+        return render(request, "restore.html", user=user, err=str(exc), result=None)
+
+    # A handful of titles sit on more than one row of the sheet. Keep the most
+    # recent date any of them carries, rather than whichever happens to come
+    # last - taking the last one silently drops a real date for a blank.
+    wanted, seen = {}, {}
+    for g in parsed["games"]:
+        key, value = g["title_norm"], g["last_updated"]
+        seen[key] = seen.get(key, 0) + 1
+        if key not in wanted or (value or "") > (wanted[key] or ""):
+            wanted[key] = value
+    collisions = sorted(k for k, n in seen.items() if n > 1)
+
+    changes, missing = [], 0
+    with db() as conn:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id, title, title_norm, last_updated FROM games")]
+        for row in rows:
+            if row["title_norm"] not in wanted:
+                missing += 1
+                continue
+            if (wanted[row["title_norm"]] or None) != (row["last_updated"] or None):
+                changes.append({"id": row["id"], "title": row["title"],
+                                "now": row["last_updated"], "was": wanted[row["title_norm"]]})
+        if apply == "1":
+            for c in changes:
+                conn.execute("UPDATE games SET last_updated = ?, updated_at = ? WHERE id = ?",
+                             (c["was"], now(), c["id"]))
+            log_audit(conn, None, user["id"], "restored update dates",
+                      "%d rows from %s" % (len(changes), file.filename))
+    if apply == "1" and changes:
+        exporter.export(tag="restore")
+    return render(request, "restore.html", user=user, err=None,
+                  result={"applied": apply == "1", "changes": changes,
+                          "not_in_csv": missing, "csv_rows": len(parsed["games"]),
+                          "collisions": collisions})
+
+
 @app.post("/admin/export")
 def admin_export(request: Request, user=Depends(require_admin)):
     exporter.export(tag="manual")
