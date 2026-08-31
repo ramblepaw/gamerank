@@ -99,6 +99,22 @@
     if (e.key === 'Escape') menus.forEach(function (m) { m.open = false; });
   });
 
+  // Every action is a POST and a redirect, which lands you back at the top of
+  // a long queue. Remember where you were and go back there.
+  var KEY = 'scroll:' + location.pathname;
+  window.addEventListener('pageshow', function () {
+    var y = sessionStorage.getItem(KEY);
+    if (y !== null) {
+      sessionStorage.removeItem(KEY);
+      window.scrollTo(0, parseInt(y, 10) || 0);
+    }
+  });
+  document.addEventListener('submit', function (e) {
+    if (e.target && e.target.method && e.target.method.toLowerCase() === 'post') {
+      try { sessionStorage.setItem(KEY, String(window.scrollY)); } catch (err) {}
+    }
+  }, true);
+
   // Groups marked .seg.optional can be turned back off: clicking the button
   // that is already on clears it. A radio group will not do that by itself,
   // and picking nothing is a real answer in all of them.

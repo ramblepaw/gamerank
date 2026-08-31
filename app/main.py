@@ -7,7 +7,8 @@ import time
 from urllib.parse import urlencode, urlparse
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends, HTTPException
-from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse, PlainTextResponse
+from fastapi.responses import (RedirectResponse, HTMLResponse, FileResponse,
+                               JSONResponse, PlainTextResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import URLSafeSerializer, BadSignature
@@ -970,23 +971,66 @@ def add_form(request: Request, mode: str = "add", user=Depends(require_user)):
                   mode=mode if mode in ADD_MODES else "add")
 
 
+@app.get("/api/games")
+def api_games(request: Request, q: str = "", user=Depends(require_user)):
+    """Titles for the picker that resolves an update with no match."""
+    rows = []
+    if q.strip():
+        with db() as conn:
+            rows = [{"id": r["id"], "title": r["title"], "status": r["status"]}
+                    for r in conn.execute(
+                        "SELECT id, title, status FROM games WHERE title_norm LIKE ?"
+                        " ORDER BY title_sort LIMIT 20", ("%" + norm_title(q) + "%",))]
+    return JSONResponse(rows)
+
+
+def classify(conn, item, mode: str) -> dict:
+    """What a pasted line means, given the mode the batch was pasted under.
+
+    The mode is the answer, not a suggestion. An update batch updates and never
+    creates; a new batch creates and never updates. A line that cannot obey
+    that is held back for a decision rather than quietly doing the other thing.
+    """
+    found = paste.match(conn, item["title"])
+    if mode == "update":
+        if found["kind"] == "exact":
+            return {"state": "ready", "game": found["game"]}
+        if found["kind"] == "near":
+            return {"state": "choose", "candidates": found["candidates"]}
+        return {"state": "unmatched"}
+
+    if mode == "archive":
+        return {"state": "skip"} if found["kind"] == "exact" else {"state": "ready"}
+
+    if found["kind"] == "exact":
+        return {"state": "duplicate", "game": found["game"]}
+    if found["kind"] == "near":
+        return {"state": "ready", "similar": found["candidates"]}
+    return {"state": "ready"}
+
+
 @app.post("/add/preview", response_class=HTMLResponse)
 def add_preview(request: Request, text: str = Form(...), mode: str = Form("add"),
                 user=Depends(require_user)):
+    mode = mode if mode in ADD_MODES else "add"
     items = paste.parse(text)
     with db() as conn:
         for i, item in enumerate(items):
             item["i"] = i
-            item["match"] = paste.match(conn, item["title"])
+            item["c"] = classify(conn, item, mode)
+    counts = {}
+    for item in items:
+        counts[item["c"]["state"]] = counts.get(item["c"]["state"], 0) + 1
     return render(request, "add.html", user=user, parsed=items, result=None, raw=text,
-                  mode=mode)
+                  mode=mode, counts=counts)
 
 
 @app.post("/add/confirm")
 async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form(""),
                       mode: str = Form("add"), user=Depends(require_user)):
+    mode = mode if mode in ADD_MODES else "add"
     items = paste.parse(text)
-    added, updated, refreshed, skipped = [], [], [], []
+    added, refreshed, skipped = [], [], []
     form = await request.form()
 
     def mark_updated(conn, game_id, item):
@@ -998,76 +1042,54 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
         grade and playtime survive; those are opinions about the game, not the
         build. Any broken state is cleared, since the update may well be the fix.
         """
-        conn.execute(
-            "UPDATE games SET verified = 0, verified_by = NULL, verified_at = NULL,"
-            " broken = 0, last_updated = ?, updated_at = ?"
-            " WHERE id = ?", (today(), now(), game_id))
+        sets = ["verified = 0", "verified_by = NULL", "verified_at = NULL", "broken = 0",
+                "last_updated = ?", "updated_at = ?"]
+        params = [today(), now()]
+        if item["steam_appid"]:
+            sets.append("steam_appid = ?")
+            params.append(item["steam_appid"])
+        link = (metadata.steam_store_url(item["steam_appid"]) if item["steam_appid"]
+                else item["url"])
+        if link:
+            sets.append("store_url = ?")
+            params.append(link)
+        params.append(game_id)
+        conn.execute("UPDATE games SET " + ", ".join(sets) + " WHERE id = ?", params)
         slots.spend(conn, game_id, user["id"], "updated")
         log_audit(conn, game_id, user["id"], "updated", "new build, back to unverified")
         refreshed.append({"id": game_id, "title": item["title"]})
 
-    def link_to(conn, game_id, item, retitle=False):
-        """Attach the pasted link to a row that already exists. No slot spent."""
-        sets = ["store_url = ?", "updated_at = ?"]
-        params = [metadata.steam_store_url(item["steam_appid"]) if item["steam_appid"]
-                  else (item["url"] or None), now()]
-        if item["steam_appid"]:
-            sets.insert(0, "steam_appid = ?")
-            params.insert(0, item["steam_appid"])
-        if retitle:
-            sets.insert(0, "title = ?")
-            sets.insert(1, "title_norm = ?")
-            params.insert(0, item["title"])
-            params.insert(1, norm_title(item["title"]))
-        params.append(game_id)
-        conn.execute("UPDATE games SET " + ", ".join(sets) + " WHERE id = ?", params)
-        updated.append({"id": game_id, "title": item["title"], "appid": item["steam_appid"]})
-
     with db() as conn:
         for i, item in enumerate(items):
-            found = paste.match(conn, item["title"])
-            decision = str(form.get("decision_%d" % i, "")).strip()
+            state = classify(conn, item, mode)
 
-            if found["kind"] == "exact":
-                gid = found["game"]["id"]
-                if mode == "archive":
+            if mode == "update":
+                # Never creates. A line that cannot be tied to a game already
+                # here waits rather than becoming one.
+                target = str(form.get("target_%d" % i, "")).strip()
+                gid = state["game"]["id"] if state["state"] == "ready" else None
+                if gid is None and target.isdigit():
+                    gid = int(target)
+                if gid is None:
                     skipped.append(item["title"])
                     continue
-                if item["steam_appid"] or item["url"]:
-                    link_to(conn, gid, item)
-                # In update mode every title already present is a new build,
-                # which is the whole point of pasting that batch. In add mode
-                # it is never assumed, so re-pasting a list is harmless.
-                if mode == "update" or decision == "update":
-                    mark_updated(conn, gid, item)
-                elif not (item["steam_appid"] or item["url"]):
-                    skipped.append(item["title"])
+                if form.get("retitle_%d" % i) == "1":
+                    conn.execute(
+                        "UPDATE games SET title = ?, title_norm = ?, title_sort = ?"
+                        " WHERE id = ?", (item["title"], norm_title(item["title"]),
+                                          sort_title(item["title"]), gid))
+                mark_updated(conn, gid, item)
                 continue
 
-            if found["kind"] == "near":
-                if mode == "archive":
-                    skipped.append(item["title"])
-                    continue
-                # Nothing happens to a near match unless it was confirmed on
-                # the preview screen.
-                if decision.startswith("update:"):
-                    gid = int(decision.split(":", 1)[1])
-                    link_to(conn, gid, item, retitle=(form.get("retitle_%d" % i) == "1"))
-                    mark_updated(conn, gid, item)
-                    continue
-                if decision.startswith("link:"):
-                    gid = int(decision.split(":", 1)[1])
-                    link_to(conn, gid, item, retitle=(form.get("retitle_%d" % i) == "1"))
-                    continue
-                if decision != "new":
-                    skipped.append(item["title"])
-                    continue
-
-            # Update mode never creates anything: a title that is not there has
-            # no build to update, and silently adding it would spend a slot on
-            # something the batch was not about.
-            if mode == "update":
-                skipped.append(item["title"])
+            title = str(form.get("title_%d" % i, "")).strip() or item["title"]
+            if state["state"] == "skip":
+                skipped.append(title)
+                continue
+            unresolved = (state["state"] == "duplicate"
+                          and form.get("anyway_%d" % i) != "1"
+                          and norm_title(title) == norm_title(item["title"]))
+            if unresolved:
+                skipped.append(title)
                 continue
 
             appid = item["steam_appid"]
@@ -1079,7 +1101,7 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
                 "INSERT INTO games (title, title_norm, title_sort, section, date_added, verified,"
                 " status, removed_at, steam_appid, store_url, cover_url, created_at, updated_at)"
                 " VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)",
-                (item["title"], norm_title(item["title"]), sort_title(item["title"]),
+                (title, norm_title(title), sort_title(title),
                  None if gone else "Recently Added", today(),
                  "removed" if gone else "active", now() if gone else None, appid,
                  metadata.steam_store_url(appid) if appid else (item["url"] or None),
@@ -1089,22 +1111,19 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
             else:
                 slots.spend(conn, cur.lastrowid, user["id"], "added")
                 log_audit(conn, cur.lastrowid, user["id"], "added", "from paste")
-            added.append({"id": cur.lastrowid, "title": item["title"], "appid": appid})
+            added.append({"id": cur.lastrowid, "title": title, "appid": appid})
 
     if fetch == "1":
-        for entry in added + updated:
+        for entry in added:
             meta = metadata.lookup(entry["title"], entry["appid"])
             if meta:
                 with db() as conn:
                     metadata.apply(conn, entry["id"], meta)
 
     exporter.export(tag="add")
-    return render(request, "add.html", user=user, parsed=None, mode=mode,
-                  result={"added": added, "updated": updated,
-                          "refreshed": refreshed, "skipped": skipped})
+    return render(request, "add.html", user=user, parsed=None, mode=mode, counts={},
+                  result={"added": added, "refreshed": refreshed, "skipped": skipped})
 
-
-# ----------------------------------------------------------------------- wishlist
 
 @app.get("/wishlist", response_class=HTMLResponse)
 def wishlist(request: Request, user=Depends(require_user)):

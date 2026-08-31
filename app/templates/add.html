@@ -7,15 +7,14 @@
 <h1>{{ titles.get(mode, 'Add games') }}</h1>
 <p class="sub">
   {% if mode == 'update' %}
-    Paste a batch of updates. Every title already in the library goes back to
-    unverified and costs a slot.
-    {{ slots.balance }} slots free.
+    Every line is a new build of a game already here. Nothing is created.
+    Each one costs a slot and goes back to unchecked. {{ slots.balance }} slots free.
   {% elif mode == 'archive' %}
     For games that were gone before any of this existed. They land straight in
-    the removed archive &mdash; nothing to check, no slot spent. A title already
-    in the library is left alone.
+    the removed archive &mdash; nothing to check, no slot spent.
   {% else %}
-    Paste a batch of new games. {{ slots.balance }} slots free.
+    Every line is a game that is not here yet. Nothing already in the library is
+    touched. {{ slots.balance }} slots free.
   {% endif %}
 </p>
 
@@ -33,174 +32,184 @@
 
 {% if result %}
   <div class="flash">
-    Added {{ result.added | length }}.
-    {% if result.refreshed %}Marked {{ result.refreshed | length }} as updated &mdash;
-      back to unverified, {{ result.refreshed | length }} slot{{ '' if result.refreshed | length == 1 else 's' }} spent.{% endif %}
-    {% if result.updated %}Attached store links to {{ result.updated | length }} already in the library.{% endif %}
-    {% if result.skipped %}Skipped {{ result.skipped | length }}.{% endif %}
+    {% if mode == 'update' %}
+      Marked {{ result.refreshed | length }} as updated &mdash; back to unchecked,
+      {{ result.refreshed | length }} slot{{ '' if result.refreshed | length == 1 else 's' }} spent.
+    {% else %}
+      Added {{ result.added | length }}.
+    {% endif %}
+    {% if result.skipped %}{{ result.skipped | length }} left alone.{% endif %}
   </div>
-  {% if result.refreshed %}
-  <div class="tablewrap" style="margin-bottom:16px">
-    <table><thead><tr><th>Updated &mdash; needs checking again</th></tr></thead><tbody>
-      {% for u in result.refreshed %}
-      <tr><td><a href="/game/{{ u.id }}">{{ u.title }}</a></td></tr>
-      {% endfor %}
-    </tbody></table>
-  </div>
-  {% endif %}
-  {% if result.updated %}
-  <div class="tablewrap" style="margin-bottom:16px">
-    <table><thead><tr><th>Linked</th><th>AppID</th></tr></thead><tbody>
-      {% for u in result.updated %}
-      <tr><td><a href="/game/{{ u.id }}">{{ u.title }}</a></td>
-          <td style="color:var(--dim)">{{ u.appid }}</td></tr>
-      {% endfor %}
-    </tbody></table>
-  </div>
-  {% endif %}
   {% if result.skipped %}
-  <div class="card grain" style="margin-bottom:16px">
-    <h2 style="margin-top:0">Skipped</h2>
-    <ul class="plain log">{% for t in result.skipped %}<li>{{ t }}</li>{% endfor %}</ul>
-  </div>
-  {% endif %}
-  {% if result.added %}
-  <div class="tablewrap" style="margin-bottom:16px">
-    <table><thead><tr><th>Title</th><th>AppID</th></tr></thead><tbody>
-      {% for a in result.added %}
-      <tr><td><a href="/game/{{ a.id }}">{{ a.title }}</a></td>
-          <td style="color:var(--dim)">{{ a.appid or '—' }}</td></tr>
-      {% endfor %}
-    </tbody></table>
+  <div class="card grain" style="margin-bottom:18px">
+    <p class="sub" style="margin:0 0 8px">Nothing was done to these:</p>
+    <ul class="plain">{% for t in result.skipped %}<li>{{ t }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
 {% endif %}
 
 {% if parsed %}
-  {% set exact_count = parsed | selectattr('match.kind', 'equalto', 'exact') | list | length %}
-  {% set new_count = 0 if mode == 'update' else (parsed | selectattr('match.kind', 'equalto', 'new') | list | length) %}
-  {% set near_count = parsed | selectattr('match.kind', 'equalto', 'near') | list | length %}
+  {% set ready = counts.get('ready', 0) %}
+  {% set stuck = counts.get('choose', 0) + counts.get('unmatched', 0) + counts.get('duplicate', 0) %}
+
   <form method="post" action="/add/confirm" autocomplete="off" data-form-type="other">
-    <input type="hidden" name="text" value="{{ raw }}">
     <input type="hidden" name="mode" value="{{ mode }}">
-    <div class="tablewrap" style="margin-bottom:14px">
-      <table>
-        <thead><tr><th>Pasted title</th><th>AppID</th><th>Match</th></tr></thead>
-        <tbody>
-          {% for p in parsed %}
-          <tr>
-            <td class="wrap" style="max-width:420px">{{ p.title }}</td>
-            <td style="color:var(--dim)">{{ p.steam_appid or '—' }}</td>
-            <td class="wrap">
-              {% if p.match.kind == 'exact' %}
-                {% if mode == 'update' %}
-                  <span class="tag ok">update</span>
-                  <span style="color:var(--dim)">back to unverified, costs a slot</span>
-                {% else %}
-                <span class="tag ok">in library</span>
-                <div style="margin-top:6px">
-                  <label style="display:block;margin-bottom:4px">
-                    <input type="radio" name="decision_{{ p.i }}" value="skip" checked
-                           style="width:auto" onchange="recount()">
-                    leave it alone
-                  </label>
-                  <label style="display:block">
-                    <input type="radio" name="decision_{{ p.i }}" value="update"
-                           class="isupdate" style="width:auto" onchange="recount()">
-                    this is an update &mdash; back to unverified, costs a slot
-                  </label>
-                </div>
-                {% endif %}
-              {% elif p.match.kind == 'new' %}
-                {% if mode == 'update' %}
-                  <span class="tag no">not in the library</span>
-                  <span style="color:var(--dim)">nothing to update &mdash; add it as a new game instead</span>
-                {% else %}
-                <span class="tag warn">not found</span>
-                <span style="color:var(--dim)">will be added, costs a slot</span>
-                {% endif %}
-              {% else %}
-                <span class="tag no">check this</span>
-                <div style="margin-top:6px">
-                  {% for cand in p.match.candidates %}
-                  <label style="display:block;margin-bottom:4px">
-                    <input type="radio" name="decision_{{ p.i }}" value="link:{{ cand.id }}"
-                           style="width:auto" onchange="recount()" {{ 'checked' if loop.first }}>
-                    same as <a href="/game/{{ cand.id }}" target="_blank">{{ cand.title }}</a>
-                  </label>
-                  <label style="display:block;margin-bottom:4px">
-                    <input type="radio" name="decision_{{ p.i }}" value="update:{{ cand.id }}"
-                           class="isupdate" style="width:auto" onchange="recount()">
-                    an update to {{ cand.title }} &mdash; unverified, costs a slot
-                  </label>
-                  {% endfor %}
-                  <label style="display:block;margin-bottom:4px">
-                    <input type="radio" name="decision_{{ p.i }}" value="new"
-                           class="isnew" style="width:auto" onchange="recount()">
-                    different game, add it (costs a slot)
-                  </label>
-                  <label style="display:block;margin-bottom:4px">
-                    <input type="radio" name="decision_{{ p.i }}" value="skip" style="width:auto">
-                    skip
-                  </label>
-                  <label style="display:block;color:var(--dim)">
-                    <input type="checkbox" name="retitle_{{ p.i }}" value="1" style="width:auto">
-                    replace the stored title with the full one
-                  </label>
+    <input type="hidden" name="text" value="{{ raw }}">
+
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th style="width:34%">Pasted</th><th>What happens</th></tr></thead>
+      <tbody>
+      {% for p in parsed %}
+        {% set c = p.c %}
+        <tr>
+          <td>
+            {{ p.title }}
+            {% if p.steam_appid %}<div class="sub" style="font-size:11px">appid {{ p.steam_appid }}</div>{% endif %}
+          </td>
+          <td>
+            {% if c.state == 'ready' and mode == 'update' %}
+              <span class="tag ok">update</span>
+              <a href="/game/{{ c.game.id }}" target="_blank">{{ c.game.title }}</a>
+              <span style="color:var(--dim)">&mdash; back to unchecked, costs a slot</span>
+
+            {% elif c.state == 'ready' and mode == 'archive' %}
+              <span class="tag ok">archive</span>
+              <span style="color:var(--dim)">straight to the removed list</span>
+
+            {% elif c.state == 'ready' %}
+              <span class="tag ok">add</span>
+              <span style="color:var(--dim)">costs a slot</span>
+              {% if c.similar %}
+                <div class="sub" style="font-size:11px;margin-top:4px">
+                  Similar, but not the same title:
+                  {% for s in c.similar %}<a href="/game/{{ s.id }}" target="_blank">{{ s.title }}</a>{{ '' if loop.last else ', ' }}{% endfor %}
                 </div>
               {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% if mode == 'archive' %}
-    <p class="sub">
-      {{ new_count }} to archive, no slots spent.
-      {% if parsed | length > new_count %}
-        {{ (parsed | length) - new_count }} already in the library and left alone.
-      {% endif %}
-    </p>
-    {% else %}
-    <p class="sub" id="tally"
-       data-base="{{ (exact_count if mode == 'update' else new_count) }}"
-       data-balance="{{ slots.balance }}">
-      {% if mode == 'update' %}{{ exact_count }} to update{% else %}{{ new_count }} to add{% endif %},
-      costs {{ exact_count if mode == 'update' else new_count }} slots. You have {{ slots.balance }}.
-      {% if near_count %}{{ near_count }} need{{ 's' if near_count == 1 else '' }} a decision above.{% endif %}
-    </p>
-    {% endif %}
-    <div class="row">
-      <label style="display:flex;gap:7px;align-items:center;color:var(--dim)">
-        <input type="checkbox" name="fetch" value="1" checked style="width:auto"> fetch art and store links
-      </label>
-      <button class="primary" type="submit" id="gobtn">Apply</button>
-      <a class="btn" href="/add">Cancel</a>
+
+            {% elif c.state == 'choose' %}
+              <span class="tag warn">which one?</span>
+              <span style="color:var(--dim)">not an exact title match</span>
+              <div style="margin-top:6px">
+                {% for cand in c.candidates %}
+                <label style="display:block;margin-bottom:3px">
+                  <input type="radio" name="target_{{ p.i }}" value="{{ cand.id }}"
+                         style="width:auto" {{ 'checked' if loop.first }}>
+                  {{ cand.title }}
+                </label>
+                {% endfor %}
+                <label style="display:block;margin-bottom:3px">
+                  <input type="radio" name="target_{{ p.i }}" value="" style="width:auto">
+                  none of these &mdash; leave it alone
+                </label>
+                <label style="display:flex;gap:7px;align-items:center;color:var(--dim);font-size:12px">
+                  <input type="checkbox" name="retitle_{{ p.i }}" value="1" style="width:auto">
+                  rename it to the pasted title
+                </label>
+              </div>
+
+            {% elif c.state == 'unmatched' %}
+              <span class="tag no">not found</span>
+              <span style="color:var(--dim)">an update needs a game to update</span>
+              <div class="finder" data-row="{{ p.i }}" style="margin-top:6px">
+                <input type="search" class="findbox" placeholder="Search the library..."
+                       value="{{ p.title }}" style="max-width:340px">
+                <div class="findhits sub" style="font-size:12px;margin-top:4px"></div>
+                <input type="hidden" name="target_{{ p.i }}" value="">
+                <label style="display:flex;gap:7px;align-items:center;color:var(--dim);font-size:12px;margin-top:4px">
+                  <input type="checkbox" name="retitle_{{ p.i }}" value="1" style="width:auto">
+                  rename it to the pasted title
+                </label>
+              </div>
+
+            {% elif c.state == 'duplicate' %}
+              <span class="tag no">already here</span>
+              <a href="/game/{{ c.game.id }}" target="_blank">{{ c.game.title }}</a>
+              <div style="margin-top:6px">
+                <label class="lbl" for="t{{ p.i }}">Add it under a different name</label>
+                <input type="text" name="title_{{ p.i }}" id="t{{ p.i }}" value="{{ p.title }}"
+                       style="max-width:340px">
+                <label style="display:flex;gap:7px;align-items:center;color:var(--dim);font-size:12px;margin-top:4px">
+                  <input type="checkbox" name="anyway_{{ p.i }}" value="1" style="width:auto">
+                  or add it anyway, same name and all
+                </label>
+              </div>
+
+            {% elif c.state == 'skip' %}
+              <span class="tag dim">already in the library</span>
+              <span style="color:var(--dim)">left alone</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
     </div>
 
-<script>
-// An update costs a slot exactly like a new game, so the running total has to
-// count both or the "short by" warning would be wrong.
-function recount() {
-  var tally = document.getElementById('tally');
-  if (!tally) return;              // archive mode spends nothing to count
-  var base = parseInt(tally.dataset.base, 10);
-  var balance = parseInt(tally.dataset.balance, 10);
-  var updates = document.querySelectorAll('input.isupdate:checked').length;
-  var extras = document.querySelectorAll('input.isnew:checked').length;
-  var adds = base + extras, cost = adds + updates;
-  var text = cost + ' slot' + (cost === 1 ? '' : 's') + ' — '
-           + adds + ' new, ' + updates + ' updated. You have ' + balance + '.';
-  if (cost > balance) text += '  Short by ' + (cost - balance) + '.';
-  tally.textContent = text;
-  tally.style.color = cost > balance ? 'var(--bad)' : '';
-  document.getElementById('gobtn').textContent =
-    cost ? 'Apply — ' + cost + ' slot' + (cost === 1 ? '' : 's') : 'Apply';
-}
-recount();
-</script>
+    <p class="sub" style="margin-top:12px">
+      {% if mode == 'update' %}
+        {{ ready }} ready to update{% if stuck %}, <b>{{ stuck }}</b> need a decision{% endif %}.
+        Costs {{ ready }} slot{{ '' if ready == 1 else 's' }} so far. You have {{ slots.balance }}.
+      {% elif mode == 'archive' %}
+        {{ ready }} to archive, no slots spent.
+        {% if counts.get('skip') %}{{ counts.get('skip') }} already in the library, left alone.{% endif %}
+      {% else %}
+        {{ ready }} ready to add{% if stuck %}, <b>{{ stuck }}</b> already here{% endif %}.
+        Costs {{ ready }} slot{{ '' if ready == 1 else 's' }} so far. You have {{ slots.balance }}.
+      {% endif %}
+    </p>
+
+    <div class="row">
+      {% if mode != 'archive' %}
+      <label style="display:flex;gap:7px;align-items:center;color:var(--dim)">
+        <input type="checkbox" name="fetch" value="1" {{ 'checked' if mode != 'update' }} style="width:auto">
+        fetch art and store links
+      </label>
+      {% endif %}
+      <button class="primary" type="submit">Apply</button>
+      <a class="btn" href="/add?mode={{ mode }}">Cancel</a>
+    </div>
   </form>
+
+<script>
+// Resolving a "not found" update: pick the game it is really a build of.
+document.querySelectorAll('.finder').forEach(function (box) {
+  var input = box.querySelector('.findbox');
+  var hits = box.querySelector('.findhits');
+  var target = box.querySelector('input[type=hidden]');
+  var timer = null;
+
+  function draw(list) {
+    hits.innerHTML = '';
+    if (!list.length) { hits.textContent = 'nothing matches'; return; }
+    list.forEach(function (g) {
+      var a = document.createElement('a');
+      a.href = '#'; a.textContent = g.title + (g.status === 'removed' ? ' (removed)' : '');
+      a.style.display = 'block';
+      a.onclick = function (e) {
+        e.preventDefault();
+        target.value = g.id;
+        hits.innerHTML = '';
+        hits.textContent = 'will update: ' + g.title;
+        hits.style.color = 'var(--ok)';
+      };
+      hits.appendChild(a);
+    });
+  }
+
+  function search() {
+    if (!input.value.trim()) { hits.innerHTML = ''; return; }
+    fetch('/api/games?q=' + encodeURIComponent(input.value))
+      .then(function (r) { return r.json(); }).then(draw)
+      .catch(function () { hits.textContent = 'could not search'; });
+  }
+  input.addEventListener('input', function () {
+    target.value = ''; hits.style.color = '';
+    clearTimeout(timer); timer = setTimeout(search, 250);
+  });
+  search();
+});
+</script>
 {% else %}
   <form method="post" action="/add/preview" autocomplete="off" data-form-type="other">
     <input type="hidden" name="mode" value="{{ mode }}">
