@@ -75,6 +75,21 @@ def settle_credit(conn, game_id, user_id, before: bool, after: bool) -> None:
         slots.debit_check(conn, game_id, user_id)
 
 
+def search_links(conn) -> list:
+    """Where you go looking for a wishlist game.
+
+    Kept in the database rather than the source, because this repository is
+    public and these are your bookmarks, not the app's.
+    """
+    try:
+        raw = json.loads(get_setting_conn(conn, "search_links", "") or "[]")
+    except ValueError:
+        return []
+    return [{"name": str(x.get("name", "")).strip(),
+             "url": str(x.get("url", "")).strip()}
+            for x in raw if str(x.get("url", "")).strip()]
+
+
 def section_names(conn) -> list:
     """The category list, in the order the admin page put it."""
     return [r["name"] for r in conn.execute(
@@ -1126,12 +1141,35 @@ async def add_confirm(request: Request, text: str = Form(...), fetch: str = Form
 
 
 @app.get("/wishlist", response_class=HTMLResponse)
-def wishlist(request: Request, user=Depends(require_user)):
+def wishlist(request: Request, sort: str = "stale", user=Depends(require_user)):
+    order = {"stale": "COALESCE(w.last_checked, '') ASC, w.created_at DESC",
+             "added": "w.created_at DESC",
+             "title": "w.title_norm ASC"}.get(sort, "COALESCE(w.last_checked, '') ASC")
     with db() as conn:
         rows = [dict(r) for r in conn.execute(
-            "SELECT w.*, u.username AS display_name FROM wishlist w LEFT JOIN users u ON u.id = w.added_by"
-            " ORDER BY w.created_at DESC")]
-    return render(request, "wishlist.html", user=user, items=rows)
+            "SELECT w.*, u.username AS display_name FROM wishlist w"
+            " LEFT JOIN users u ON u.id = w.added_by ORDER BY " + order)]
+        links = search_links(conn)
+    return render(request, "wishlist.html", user=user, items=rows, links=links, sort=sort)
+
+
+@app.post("/wishlist/{item_id}/checked")
+def wishlist_checked(request: Request, item_id: int, count: str = Form(""),
+                     user=Depends(require_user)):
+    """Record that you looked, and what the page showed while you were there.
+
+    The number is yours - nothing here reads that page. A count higher than
+    last time is how you notice something new without going back through
+    everything you have already ruled out.
+    """
+    try:
+        n = int(count) if str(count).strip() else None
+    except ValueError:
+        n = None
+    with db() as conn:
+        conn.execute("UPDATE wishlist SET last_checked = ?, last_count = ?, updated_at = ?"
+                     " WHERE id = ?", (today(), n, now(), item_id))
+    return RedirectResponse(_back_to(request, "/wishlist"), status_code=303)
 
 
 @app.post("/wishlist")
@@ -1198,6 +1236,7 @@ def admin_page(request: Request, user=Depends(require_admin)):
             " FROM sections s ORDER BY s.position, s.name")]
         seats = {r["grade_seat"]: r["id"] for r in conn.execute(
             "SELECT id, grade_seat FROM users WHERE grade_seat IN (1, 2)")}
+        links = search_links(conn)
         checked = [dict(r) for r in conn.execute(
             "SELECT g.id, g.title, g.verified_at, g.broken, g.repack, g.status,"
             " u.username AS verifier FROM games g"
@@ -1216,7 +1255,7 @@ def admin_page(request: Request, user=Depends(require_admin)):
     return render(request, "admin.html", user=user, users=users, settings=settings,
                   events=events, exports=exports, no_cover=no_cover,
                   guest=dict(guest) if guest else None,
-                  section_rows=section_rows, seats=seats, checked=checked,
+                  section_rows=section_rows, seats=seats, checked=checked, links=links,
                   igdb=metadata.igdb_available(), job=jobs.status())
 
 
@@ -1302,6 +1341,19 @@ def admin_users(request: Request, username: str = Form(...),
             " created_at) VALUES (?, ?, ?, ?, 0, ?) ON CONFLICT(username) DO UPDATE SET"
             " display_name = excluded.username, is_admin = excluded.is_admin, is_guest = 0",
             (name, name, hash_password(password), 1 if is_admin == "1" else 0, now()))
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/search-links")
+def admin_search_links(request: Request, names: str = Form(""), urls: str = Form(""),
+                       user=Depends(require_admin)):
+    """One per line: a label and a URL with GAME where the title goes."""
+    pairs = []
+    for name, url in zip(names.splitlines(), urls.splitlines()):
+        url = url.strip()
+        if url:
+            pairs.append({"name": name.strip() or url, "url": url})
+    set_setting("search_links", json.dumps(pairs))
     return RedirectResponse("/admin", status_code=303)
 
 

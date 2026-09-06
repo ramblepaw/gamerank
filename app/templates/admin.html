@@ -277,6 +277,33 @@
       </form>
     </div>
 
+    <h2>Where to look</h2>
+    <div class="card grain">
+      <p class="sub" style="margin:0 0 12px">
+        Buttons on each wishlist row. One per line, matched up: a label, and a
+        URL with <b>GAME</b> where the title goes. Kept here rather than in the
+        source, since the repository is public.
+      </p>
+      <form method="post" action="/admin/search-links" autocomplete="off" data-form-type="other">
+        <div class="row">
+          <div class="grow">
+            <label class="lbl" for="names">Labels</label>
+            <textarea name="names" id="names" style="min-height:80px"
+              placeholder="Main&#10;Forum">{% for l in links %}{{ l.name }}
+{% endfor %}</textarea>
+          </div>
+          <div class="grow" style="flex:3">
+            <label class="lbl" for="urls">URLs</label>
+            <textarea name="urls" id="urls" style="min-height:80px"
+              placeholder="https://example.com/browse/?q=GAME">{% for l in links %}{{ l.url }}
+{% endfor %}</textarea>
+          </div>
+        </div>
+        <div style="height:10px"></div>
+        <button class="primary" type="submit">Save</button>
+      </form>
+    </div>
+
     <h2>Activity</h2>
     <div class="card grain">
       <p class="sub" style="margin:0 0 12px">

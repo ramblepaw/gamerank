@@ -4,7 +4,12 @@
 {% block body %}
 
 <h1>Wishlist</h1>
-<p class="sub">Games you don't have yet. No slot cost until one moves to the library.</p>
+<p class="sub">
+  Games to go and find. No slot cost until one moves to the library.
+  &middot; <a href="/wishlist?sort=stale">least recently checked</a>
+  &middot; <a href="/wishlist?sort=added">newest</a>
+  &middot; <a href="/wishlist?sort=title">title</a>
+</p>
 
 <form class="card grain" method="post" action="/wishlist" style="margin-bottom:18px" autocomplete="off" data-form-type="other">
   <label class="lbl" for="text">Paste list</label>
@@ -16,17 +21,45 @@
 {% if not items %}<div class="empty">Empty.</div>{% else %}
 <div class="tablewrap">
 <table>
-  <thead><tr><th></th><th>Title</th><th>Added by</th><th>When</th><th></th></tr></thead>
+  <thead><tr>
+    <th></th><th>Title</th><th>Look</th><th>Last checked</th><th>Added</th><th></th>
+  </tr></thead>
   <tbody>
   {% for it in items %}
     <tr>
       <td class="thumb">{% if it.cover_url %}<img src="{{ it.cover_url }}" alt="" loading="lazy"
         onerror="this.style.visibility='hidden'">{% endif %}</td>
-      <td>{% if it.store_url %}<a href="{{ it.store_url }}" target="_blank" rel="noopener">{{ it.title }}</a>
-          {% else %}{{ it.title }}{% endif %}</td>
-      <td style="color:var(--dim)">{{ it.display_name or '—' }}</td>
-      <td style="color:var(--dim)">{{ d(it.created_at) }}</td>
       <td>
+        {% if it.store_url %}<a href="{{ it.store_url }}" target="_blank" rel="noopener">{{ it.title }}</a>
+        {% else %}{{ it.title }}{% endif %}
+        {% if it.notes %}<div class="sub" style="font-size:11px">{{ it.notes }}</div>{% endif %}
+      </td>
+
+      <td style="white-space:nowrap">
+        {% for l in links %}
+          <a class="btn sm" target="_blank" rel="noopener"
+             href="{{ l.url.replace('GAME', it.title | urlencode) }}">{{ l.name }}</a>
+        {% else %}
+          <span class="sub" style="font-size:11px">none set up</span>
+        {% endfor %}
+      </td>
+
+      <td style="white-space:nowrap">
+        <form method="post" action="/wishlist/{{ it.id }}/checked" style="display:flex;gap:5px;align-items:center"
+              autocomplete="off" data-form-type="other">
+          <input type="number" name="count" min="0" value="{{ it.last_count if it.last_count is not none else '' }}"
+                 style="width:74px" title="How many results were on the page">
+          <button class="sm" type="submit" title="Record that you looked just now">Checked</button>
+        </form>
+        <div class="sub" style="font-size:11px">
+          {% if it.last_checked %}{{ d(it.last_checked) }}{% else %}never{% endif %}
+        </div>
+      </td>
+
+      <td style="color:var(--dim)">{{ d(it.created_at) }}
+        <div class="sub" style="font-size:11px">{{ it.display_name or '' }}</div></td>
+
+      <td style="white-space:nowrap">
         <form method="post" action="/wishlist/{{ it.id }}/promote" style="display:inline" autocomplete="off" data-form-type="other">
           <button class="sm" type="submit">Move to library</button>
         </form>
@@ -39,5 +72,11 @@
   </tbody>
 </table>
 </div>
+
+{% if not links %}
+<p class="sub" style="margin-top:12px">
+  Set up where to look in <a href="/admin">Admin</a> and a button appears on every row.
+</p>
+{% endif %}
 {% endif %}
 {% endblock %}

@@ -260,6 +260,10 @@ MIGRATIONS = [
     ("games", "title_sort", "TEXT"),
     ("games", "repack", "TEXT"),
     ("users", "date_format", "TEXT"),
+    # When you last went looking for a wishlist game, and how many results
+    # were on the page at the time, so a change is visible next visit.
+    ("wishlist", "last_checked", "TEXT"),
+    ("wishlist", "last_count", "INTEGER"),
 ]
 
 
