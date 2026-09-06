@@ -4,7 +4,7 @@ import json
 import os
 import re
 import time
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote_plus, urlencode, urlparse
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends, HTTPException
 from fastapi.responses import (RedirectResponse, HTMLResponse, FileResponse,
@@ -75,19 +75,44 @@ def settle_credit(conn, game_id, user_id, before: bool, after: bool) -> None:
         slots.debit_check(conn, game_id, user_id)
 
 
-def search_links(conn) -> list:
-    """Where you go looking for a wishlist game.
+# Where the title goes in a search URL. Any of these, in any case, so a
+# template written from memory still works.
+SEARCH_TOKENS = ("GAME", "{GAME}", "{TITLE}", "%S")
+
+
+def search_url(conn) -> str:
+    """The one search URL a title can be dropped into.
 
     Kept in the database rather than the source, because this repository is
-    public and these are your bookmarks, not the app's.
+    public and this is your bookmark, not the app's.
     """
+    raw = (get_setting_conn(conn, "search_url", "") or "").strip()
+    if raw:
+        return raw
+    # Older builds stored a list of labelled links; keep the first one working.
     try:
-        raw = json.loads(get_setting_conn(conn, "search_links", "") or "[]")
+        old = json.loads(get_setting_conn(conn, "search_links", "") or "[]")
     except ValueError:
-        return []
-    return [{"name": str(x.get("name", "")).strip(),
-             "url": str(x.get("url", "")).strip()}
-            for x in raw if str(x.get("url", "")).strip()]
+        return ""
+    return str(old[0].get("url", "")).strip() if old else ""
+
+
+def search_token(url: str) -> str:
+    """Which placeholder this URL uses, if any."""
+    upper = (url or "").upper()
+    for token in SEARCH_TOKENS:
+        i = upper.find(token)
+        if i >= 0:
+            return url[i:i + len(token)]
+    return ""
+
+
+def search_for(url: str, title: str) -> str:
+    """The URL to open for one game, or nothing if there is no placeholder."""
+    token = search_token(url)
+    if not token:
+        return ""
+    return url.replace(token, quote_plus(title or ""))
 
 
 def section_names(conn) -> list:
@@ -1149,8 +1174,11 @@ def wishlist(request: Request, sort: str = "stale", user=Depends(require_user)):
         rows = [dict(r) for r in conn.execute(
             "SELECT w.*, u.username AS display_name FROM wishlist w"
             " LEFT JOIN users u ON u.id = w.added_by ORDER BY " + order)]
-        links = search_links(conn)
-    return render(request, "wishlist.html", user=user, items=rows, links=links, sort=sort)
+        url = search_url(conn)
+    for row in rows:
+        row["search"] = search_for(url, row["title"])
+    return render(request, "wishlist.html", user=user, items=rows, sort=sort,
+                  search_host=urlparse(url).netloc if url else "")
 
 
 @app.post("/wishlist/{item_id}/link")
@@ -1254,7 +1282,7 @@ def admin_page(request: Request, user=Depends(require_admin)):
             " FROM sections s ORDER BY s.position, s.name")]
         seats = {r["grade_seat"]: r["id"] for r in conn.execute(
             "SELECT id, grade_seat FROM users WHERE grade_seat IN (1, 2)")}
-        links = search_links(conn)
+        s_url = search_url(conn)
         checked = [dict(r) for r in conn.execute(
             "SELECT g.id, g.title, g.verified_at, g.broken, g.repack, g.status,"
             " u.username AS verifier FROM games g"
@@ -1273,7 +1301,9 @@ def admin_page(request: Request, user=Depends(require_admin)):
     return render(request, "admin.html", user=user, users=users, settings=settings,
                   events=events, exports=exports, no_cover=no_cover,
                   guest=dict(guest) if guest else None,
-                  section_rows=section_rows, seats=seats, checked=checked, links=links,
+                  section_rows=section_rows, seats=seats, checked=checked,
+                  search_url=s_url, search_token=search_token(s_url),
+                  search_example=search_for(s_url, "Hollow Knight"),
                   igdb=metadata.igdb_available(), job=jobs.status())
 
 
@@ -1363,15 +1393,10 @@ def admin_users(request: Request, username: str = Form(...),
 
 
 @app.post("/admin/search-links")
-def admin_search_links(request: Request, names: str = Form(""), urls: str = Form(""),
+def admin_search_links(request: Request, url: str = Form(""),
                        user=Depends(require_admin)):
-    """One per line: a label and a URL with GAME where the title goes."""
-    pairs = []
-    for name, url in zip(names.splitlines(), urls.splitlines()):
-        url = url.strip()
-        if url:
-            pairs.append({"name": name.strip() or url, "url": url})
-    set_setting("search_links", json.dumps(pairs))
+    """One URL, with GAME standing in for the title."""
+    set_setting("search_url", url.strip())
     return RedirectResponse("/admin", status_code=303)
 
 

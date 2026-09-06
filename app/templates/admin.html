@@ -280,28 +280,30 @@
     <h2>Where to look</h2>
     <div class="card grain">
       <p class="sub" style="margin:0 0 12px">
-        Buttons on each wishlist row. One per line, matched up: a label, and a
-        URL with <b>GAME</b> where the title goes. Kept here rather than in the
-        source, since the repository is public.
+        A search URL for the wishlist buttons. Put <b>GAME</b> where the title
+        belongs &mdash; that word is replaced per game, so do not paste a URL with a
+        real title still in it. Kept here rather than in the source, since the
+        repository is public.
       </p>
       <form method="post" action="/admin/search-links" autocomplete="off" data-form-type="other">
-        <div class="row">
-          <div class="grow">
-            <label class="lbl" for="names">Labels</label>
-            <textarea name="names" id="names" style="min-height:80px"
-              placeholder="Main&#10;Forum">{% for l in links %}{{ l.name }}
-{% endfor %}</textarea>
-          </div>
-          <div class="grow" style="flex:3">
-            <label class="lbl" for="urls">URLs</label>
-            <textarea name="urls" id="urls" style="min-height:80px"
-              placeholder="https://example.com/browse/?q=GAME">{% for l in links %}{{ l.url }}
-{% endfor %}</textarea>
-          </div>
-        </div>
+        <label class="lbl" for="surl">Search URL</label>
+        <input type="text" name="url" id="surl" value="{{ search_url or '' }}"
+               placeholder="https://example.com/browse/?q=GAME">
         <div style="height:10px"></div>
         <button class="primary" type="submit">Save</button>
       </form>
+
+      {% if search_url and not search_token %}
+      <div class="flash warn" style="margin:12px 0 0">
+        No <b>GAME</b> in that URL, so every button would open the same page.
+        Replace the title in it with the word GAME.
+      </div>
+      {% elif search_example %}
+      <p class="sub" style="font-size:12px;margin:12px 0 0">
+        A game called Hollow Knight opens:<br>
+        <span style="color:var(--ok)">{{ search_example }}</span>
+      </p>
+      {% endif %}
     </div>
 
     <h2>Activity</h2>

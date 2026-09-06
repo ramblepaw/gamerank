@@ -36,10 +36,10 @@
       </td>
 
       <td style="white-space:nowrap">
-        {% for l in links %}
+        {% if it.search %}
           <a class="btn sm" target="_blank" rel="noopener"
-             href="{{ l.url.replace('GAME', it.title | urlencode) }}">{{ l.name }}</a>
-        {% endfor %}
+             href="{{ it.search }}">{{ search_host or 'Search' }}</a>
+        {% endif %}
         {% if it.direct_url %}
           <a class="btn sm" target="_blank" rel="noopener" href="{{ it.direct_url }}">Saved</a>
         {% endif %}
@@ -80,9 +80,9 @@
 </table>
 </div>
 
-{% if not links %}
+{% if not search_host %}
 <p class="sub" style="margin-top:12px">
-  Set up where to look in <a href="/admin">Admin</a> and a button appears on every row.
+  Set a search URL in <a href="/admin">Admin</a> and a button appears on every row.
 </p>
 {% endif %}
 {% endif %}
