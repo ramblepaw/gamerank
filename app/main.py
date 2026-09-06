@@ -1153,6 +1153,24 @@ def wishlist(request: Request, sort: str = "stale", user=Depends(require_user)):
     return render(request, "wishlist.html", user=user, items=rows, links=links, sort=sort)
 
 
+@app.post("/wishlist/{item_id}/link")
+def wishlist_link(request: Request, item_id: int, direct_url: str = Form(""),
+                  user=Depends(require_user)):
+    """Remember a link that cannot be built from the title.
+
+    Some searches are addressed by a hash rather than the game's name, so there
+    is nothing to substitute into. Paste it once and the button goes straight
+    there from then on.
+    """
+    url = direct_url.strip()
+    if url and not url.lower().startswith(("http://", "https://")):
+        url = "https://" + url
+    with db() as conn:
+        conn.execute("UPDATE wishlist SET direct_url = ?, updated_at = ? WHERE id = ?",
+                     (url or None, now(), item_id))
+    return RedirectResponse(_back_to(request, "/wishlist"), status_code=303)
+
+
 @app.post("/wishlist/{item_id}/checked")
 def wishlist_checked(request: Request, item_id: int, count: str = Form(""),
                      user=Depends(require_user)):

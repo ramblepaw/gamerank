@@ -264,6 +264,9 @@ MIGRATIONS = [
     # were on the page at the time, so a change is visible next visit.
     ("wishlist", "last_checked", "TEXT"),
     ("wishlist", "last_count", "INTEGER"),
+    # A link that cannot be built from the title - a hashed search URL,
+    # a thread - so it is kept per game rather than as a template.
+    ("wishlist", "direct_url", "TEXT"),
 ]
 
 

@@ -39,9 +39,16 @@
         {% for l in links %}
           <a class="btn sm" target="_blank" rel="noopener"
              href="{{ l.url.replace('GAME', it.title | urlencode) }}">{{ l.name }}</a>
-        {% else %}
-          <span class="sub" style="font-size:11px">none set up</span>
         {% endfor %}
+        {% if it.direct_url %}
+          <a class="btn sm" target="_blank" rel="noopener" href="{{ it.direct_url }}">Saved</a>
+        {% endif %}
+        <form method="post" action="/wishlist/{{ it.id }}/link" style="margin-top:4px"
+              autocomplete="off" data-form-type="other">
+          <input type="text" name="direct_url" value="{{ it.direct_url or '' }}"
+                 placeholder="paste a link for this game" style="width:210px;font-size:11px">
+          <button class="sm" type="submit">Save</button>
+        </form>
       </td>
 
       <td style="white-space:nowrap">
