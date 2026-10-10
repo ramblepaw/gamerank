@@ -18,7 +18,8 @@ from . import slots, queues, exporter, importer, metadata, paste, jobs, themes, 
 from .db import (
     db, init_db, now, today, norm_title, sort_title, log_audit, get_setting_conn, set_setting,
     hash_password, verify_password, GRADES, REPACKS, REPACK_KEYS,
-    DATE_FORMATS, DEFAULT_DATE_FORMAT, fmt_date,
+    DATE_FORMATS, DEFAULT_DATE_FORMAT, fmt_date, local_now, forget_timezone,
+    available_timezones,
     EXPORT_DIR, FALLBACK_DATE, DATA_DIR,
     THEMES, ACCENTS, DENSITIES, TILE_SIZES, THEME_TOKENS, DEFAULT_THEME,
 )
@@ -45,6 +46,12 @@ templates = Jinja2Templates(directory=os.path.join(BASE, "templates"))
 # Everything the removal list treats as a candidate. One definition so the
 # count on the dashboard and the rows on the page can't drift apart.
 RAIL_LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + ["#"]
+
+# Offered in Admin. The full tz database is thousands of entries, which is a
+# worse list to pick from than the handful anyone here would want.
+ZONES = sorted(z for z in available_timezones()
+               if z.startswith(("America/", "Europe/", "Asia/", "Australia/", "Pacific/",
+                                "Africa/", "Atlantic/", "Indian/")) or z == "UTC")
 
 
 def holds_credit(verified, broken, status: str = "active") -> bool:
@@ -1299,14 +1306,14 @@ def admin_page(request: Request, user=Depends(require_admin)):
         exports = sorted(os.listdir(EXPORT_DIR), reverse=True)[:10]
     except OSError:
         exports = []
-    stamp = datetime.now().astimezone()
+    stamp = local_now()
     clock = "%s %s" % (stamp.strftime("%Y-%m-%d %H:%M"),
                        stamp.tzname() or stamp.strftime("%z"))
     return render(request, "admin.html", user=user, users=users, settings=settings,
                   events=events, exports=exports, no_cover=no_cover,
                   guest=dict(guest) if guest else None,
                   section_rows=section_rows, seats=seats, checked=checked,
-                  clock=clock,
+                  clock=clock, zones=ZONES,
                   search_url=s_url, search_token=search_token(s_url),
                   search_example=search_for(s_url, "Hollow Knight"),
                   igdb=metadata.igdb_available(), job=jobs.status())
@@ -1359,13 +1366,16 @@ def admin_activity(request: Request, q: str = "", action: str = "", who: str = "
 @app.post("/admin/settings")
 def admin_settings(request: Request, slot_limit: str = Form(...), checks_per_slot: str = Form(...),
                    queue_size: str = Form(...), library_target: str = Form(...),
-                   user=Depends(require_admin)):
+                   timezone: str = Form(""), user=Depends(require_admin)):
     for key, value in (("slot_limit", slot_limit), ("checks_per_slot", checks_per_slot),
                        ("queue_size", queue_size), ("library_target", library_target)):
         try:
             set_setting(key, str(max(1, int(value))))
         except ValueError:
             pass
+    set_setting("timezone", timezone.strip())
+    forget_timezone()
+
     # Part-credit carried over from a wider ratio would otherwise sit there
     # unspendable once the ratio narrows.
     with db() as conn:

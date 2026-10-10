@@ -114,13 +114,22 @@
         <div class="grow"><label class="lbl" for="library_target">Target</label>
           <input type="number" min="1" name="library_target" id="library_target" value="{{ settings.get('library_target', '2000') }}"></div>
       </div>
+      <div style="margin-top:12px">
+        <label class="lbl" for="timezone">Time zone</label>
+        <select name="timezone" id="timezone">
+          <option value="">follow the server</option>
+          {% for z in zones %}
+          <option value="{{ z }}" {{ 'selected' if settings.get('timezone') == z }}>{{ z }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <div style="height:12px"></div>
       <button class="primary" type="submit">Save</button>
     </form>
     <p class="sub" style="font-size:12px;margin:8px 0 0">
-      The app's clock reads <b>{{ clock }}</b>. If that is not your local time,
-      dates land on the wrong day &mdash; set <code>TZ</code> in the app's
-      environment and restart it.
+      The app's clock reads <b>{{ clock }}</b>. Dates are stamped from that, so
+      if it is not your local time, things added in the evening land on
+      tomorrow.
     </p>
 
     <h2>Users</h2>

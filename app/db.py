@@ -8,6 +8,7 @@ import secrets
 import unicodedata
 from contextlib import contextmanager
 from datetime import datetime
+from zoneinfo import ZoneInfo, available_timezones
 
 DATA_DIR = os.environ.get("GRT_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "data"))
 DB_PATH = os.path.join(DATA_DIR, "gamerank.db")
@@ -270,18 +271,56 @@ MIGRATIONS = [
 ]
 
 
+# Resolved once and reused: now() runs many times per request, and reading a
+# setting from the database each time would be silly.
+_ZONE = None
+_ZONE_READY = False
+
+
+def forget_timezone() -> None:
+    """Call after the setting changes so the next stamp uses the new zone."""
+    global _ZONE, _ZONE_READY
+    _ZONE, _ZONE_READY = None, False
+
+
+def _zone():
+    """The zone to stamp in: the app's setting, else whatever the host says."""
+    global _ZONE, _ZONE_READY
+    if _ZONE_READY:
+        return _ZONE
+    name = ""
+    try:
+        name = get_setting("timezone", "") or ""
+    except Exception:
+        name = ""                      # too early, or no database yet
+    zone = None
+    if name:
+        try:
+            zone = ZoneInfo(name)
+        except Exception:
+            zone = None                # unknown name: fall back rather than crash
+    _ZONE, _ZONE_READY = zone, True
+    return zone
+
+
+def local_now():
+    """The current moment, in the zone this app is configured for."""
+    zone = _zone()
+    return datetime.now(zone) if zone else datetime.now().astimezone()
+
+
 def now() -> str:
-    """A timestamp in the server's own time, offset included.
+    """A timestamp in the app's own time, offset included.
 
     These were UTC, which put every date stamped after late afternoon onto
     tomorrow. The offset is kept so a stored time is never ambiguous.
     """
-    return datetime.now().astimezone().isoformat(timespec="seconds")
+    return local_now().isoformat(timespec="seconds")
 
 
 def today() -> str:
-    """The date it is where the server is, which is the date a person means."""
-    return datetime.now().date().isoformat()
+    """The date it is where you are, which is the date you mean."""
+    return local_now().date().isoformat()
 
 
 # Leading words a shelf would file under the next word instead.
