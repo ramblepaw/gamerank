@@ -7,7 +7,7 @@ import hashlib
 import secrets
 import unicodedata
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 
 DATA_DIR = os.environ.get("GRT_DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "data"))
 DB_PATH = os.path.join(DATA_DIR, "gamerank.db")
@@ -271,11 +271,17 @@ MIGRATIONS = [
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    """A timestamp in the server's own time, offset included.
+
+    These were UTC, which put every date stamped after late afternoon onto
+    tomorrow. The offset is kept so a stored time is never ambiguous.
+    """
+    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def today() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+    """The date it is where the server is, which is the date a person means."""
+    return datetime.now().date().isoformat()
 
 
 # Leading words a shelf would file under the next word instead.

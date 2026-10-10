@@ -4,6 +4,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime
 from urllib.parse import quote_plus, urlencode, urlparse
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends, HTTPException
@@ -1298,10 +1299,14 @@ def admin_page(request: Request, user=Depends(require_admin)):
         exports = sorted(os.listdir(EXPORT_DIR), reverse=True)[:10]
     except OSError:
         exports = []
+    stamp = datetime.now().astimezone()
+    clock = "%s %s" % (stamp.strftime("%Y-%m-%d %H:%M"),
+                       stamp.tzname() or stamp.strftime("%z"))
     return render(request, "admin.html", user=user, users=users, settings=settings,
                   events=events, exports=exports, no_cover=no_cover,
                   guest=dict(guest) if guest else None,
                   section_rows=section_rows, seats=seats, checked=checked,
+                  clock=clock,
                   search_url=s_url, search_token=search_token(s_url),
                   search_example=search_for(s_url, "Hollow Knight"),
                   igdb=metadata.igdb_available(), job=jobs.status())

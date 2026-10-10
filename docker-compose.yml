@@ -13,6 +13,9 @@ services:
     # user: '1000:1000'
     environment:
       GRT_DATA_DIR: /data
+      # Without this the container runs on UTC and anything added in the
+      # evening is dated tomorrow. Use your own zone.
+      TZ: America/Los_Angeles
       GRT_QUEUE_SIZE: '5'
       # Read from a .env file next to this compose file, so no secret ends up
       # in the repo. See .env.example.
